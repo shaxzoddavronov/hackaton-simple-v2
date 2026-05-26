@@ -22,11 +22,14 @@ class LLMClient:
         self,
         endpoint: str | None = None,
         model: str | None = None,
-        api_key: str = "not-needed",
+        api_key: str | None = None,
     ) -> None:
         self._endpoint = endpoint or settings.VLLM_ENDPOINT
         self._model = model or settings.VLLM_MODEL
-        self._client = AsyncOpenAI(base_url=self._endpoint, api_key=api_key)
+        # ``api_key`` falls back to settings so the env (.env) is the single
+        # source of truth. Local plain vLLM accepts any non-empty string.
+        resolved_key = api_key or settings.VLLM_API_KEY or "not-needed"
+        self._client = AsyncOpenAI(base_url=self._endpoint, api_key=resolved_key)
 
     @property
     def model(self) -> str:

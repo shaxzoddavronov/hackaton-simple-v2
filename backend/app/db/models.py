@@ -393,6 +393,107 @@ class Settings(Base):
     )
 
 
+class UploadedDocument(Base):
+    """User-uploaded reference doc (markdown/plain text). Becomes RAG chunks.
+
+    The original text is preserved so chunks can be re-built on demand (e.g.,
+    after changing chunker parameters) without re-uploading.
+    """
+
+    __tablename__ = "uploaded_documents"
+
+    id: Mapped[UUID] = mapped_column(
+        UUIDType, primary_key=True, server_default=_UUID_DEFAULT
+    )
+    owner_id: Mapped[UUID] = mapped_column(
+        UUIDType,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    workspace_id: Mapped[UUID | None] = mapped_column(
+        UUIDType,
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_uploaded_documents_owner_id", "owner_id"),
+        Index("ix_uploaded_documents_workspace_id", "workspace_id"),
+    )
+
+
+class RagChunk(Base):
+    """A retrievable chunk in the RAG index.
+
+    Kinds:
+      - ``schema_table``  — one chunk per table (name + columns + FKs).
+      - ``schema_column`` — one chunk per column (when high cardinality info).
+      - ``api_endpoint``  — one chunk per FastAPI route in our own service.
+      - ``user_doc``      — chunk of an uploaded document.
+
+    ``embedding`` is a 1024-dim vector under Postgres (pgvector) and a JSON-
+    encoded float array under SQLite (unit tests). Retrieval falls back to
+    Python-side cosine similarity on the SQLite path.
+    """
+
+    __tablename__ = "rag_chunks"
+
+    id: Mapped[UUID] = mapped_column(
+        UUIDType, primary_key=True, server_default=_UUID_DEFAULT
+    )
+    # workspace_id is nullable so global chunks (e.g., our REST API catalog)
+    # can live in the same index. Workspace-scoped retrieval still filters.
+    workspace_id: Mapped[UUID | None] = mapped_column(
+        UUIDType,
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    document_id: Mapped[UUID | None] = mapped_column(
+        UUIDType,
+        ForeignKey("uploaded_documents.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    # Column name "chunk_text" rather than "text" so it doesn't shadow the
+    # imported SQL ``text()`` function in the class body below.
+    chunk_text: Mapped[str] = mapped_column("text", Text, nullable=False)
+    # Postgres: pgvector ``vector(1024)``; SQLite: JSON array of floats.
+    # The actual column type is set in the migration so the model stays
+    # dialect-agnostic. SQLAlchemy treats it as Text both sides via JSON.
+    embedding: Mapped[Any] = mapped_column(JSONType, nullable=True)
+    chunk_metadata: Mapped[dict[str, Any]] = mapped_column(
+        JSONType, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "kind IN ('schema_table','schema_column','api_endpoint','user_doc')",
+            name="ck_rag_chunks_kind",
+        ),
+        UniqueConstraint(
+            "workspace_id", "kind", "source_key",
+            name="uq_rag_chunks_workspace_kind_source",
+        ),
+        Index("ix_rag_chunks_workspace_id", "workspace_id"),
+        Index("ix_rag_chunks_kind", "kind"),
+        Index("ix_rag_chunks_document_id", "document_id"),
+    )
+
+
 __all__ = [
     "User",
     "Workspace",
@@ -403,4 +504,6 @@ __all__ = [
     "QueryHistory",
     "ProfileJob",
     "Settings",
+    "UploadedDocument",
+    "RagChunk",
 ]

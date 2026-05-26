@@ -29,6 +29,11 @@ class GraphState(TypedDict, total=False):
     schema_bundle: SchemaBundle | None
     pruned_table_qnames: list[str]
 
+    # RAG retrieval (semantic top-K via Triton + pgvector). When empty,
+    # the planner falls back to the BM25 pruned list above. Each item is
+    # the dict form of a `RetrievedChunk` (see services/rag/retriever.py).
+    retrieved_chunks: list[dict[str, Any]]
+
     # Planner / validator / executor
     plan: SqlPlan | None
     validation: ValidationResult | None

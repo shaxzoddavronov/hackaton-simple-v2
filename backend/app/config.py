@@ -47,6 +47,34 @@ class Settings(BaseSettings):
     # --- Local LLM (vLLM, OpenAI-compatible) ------------------------------------
     VLLM_ENDPOINT: str = Field(default="http://localhost:8000/v1")
     VLLM_MODEL: str = Field(default="google/gemma-3-4b-it")
+    # Some OpenAI-compat servers (Open WebUI, LiteLLM, hosted vLLM behind
+    # a gateway) require a real bearer token. Local plain vLLM does not.
+    VLLM_API_KEY: str = Field(default="not-needed")
+
+    # --- Triton (embeddings only — never LLM) -----------------------------------
+    # Triton serves the embedding model over its HTTP inference API.
+    # Default points at the local docker compose service. Set TRITON_URL=""
+    # to disable RAG entirely (retriever falls back to BM25 pruner).
+    TRITON_URL: str = Field(default="http://localhost:8001")
+    TRITON_EMBED_MODEL: str = Field(default="bge_m3")
+    TRITON_EMBED_MODEL_VERSION: str = Field(default="")  # empty = latest
+    TRITON_TIMEOUT_S: float = Field(default=30.0, gt=0)
+    # Optional bearer token. Required when Triton is fronted by a reverse
+    # proxy that enforces auth (NIM, ingress, API gateway). Leave blank
+    # for an unauthenticated local Triton.
+    TRITON_API_KEY: str = Field(default="")
+    # Header name to send the token under. NVIDIA NIM expects Bearer
+    # under ``Authorization``; some gateways prefer ``x-api-key``.
+    TRITON_AUTH_HEADER: str = Field(default="Authorization")
+    TRITON_AUTH_SCHEME: str = Field(default="Bearer")
+    EMBEDDING_DIM: int = Field(default=1024, ge=8)  # bge-m3 = 1024
+
+    # --- RAG behaviour ----------------------------------------------------------
+    RAG_TOP_K: int = Field(default=12, ge=1)
+    RAG_INDEX_BATCH: int = Field(default=32, ge=1)
+    # Daily diff check — Celery beat fires at this hour (UTC).
+    RAG_DIFF_CHECK_HOUR_UTC: int = Field(default=0, ge=0, le=23)
+    RAG_DIFF_CHECK_MINUTE_UTC: int = Field(default=0, ge=0, le=59)
 
 
 @lru_cache(maxsize=1)
