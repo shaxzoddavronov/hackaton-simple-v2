@@ -59,8 +59,10 @@ async def _resolve_or_workspace_id(
 
 
 async def _ensure_session(
-    session: AsyncSession, user: User, sid: UUID | None, workspace_id: UUID | None
+    session: AsyncSession, user: User, sid: UUID | None, workspace_id: UUID
 ) -> ChatSession:
+    # ``workspace_id`` is required (NOT NULL in DB). Callers MUST resolve
+    # it before invoking us — see post_chat for the clarify fallback.
     if sid is not None:
         cs = await session.get(ChatSession, sid)
         if cs is not None and cs.user_id == user.id:
@@ -83,6 +85,29 @@ async def post_chat(
     current_user: User = Depends(get_current_user),
 ) -> StreamingResponse:
     workspace_id = await _resolve_or_workspace_id(session, current_user, payload)
+    # ChatSession.workspace_id is NOT NULL — we must resolve one before
+    # creating a session row. When the resolver can't decide (no workspaces
+    # yet, ambiguous mention, dropdown not set), reply with a clarify
+    # text_only UISpec over SSE instead of crashing on the FK constraint.
+    if workspace_id is None:
+        async def _clarify_stream() -> AsyncIterator[bytes]:
+            yield _sse("session", {"session_id": None, "workspace_id": None})
+            yield _sse(
+                "final",
+                {
+                    "ui_spec": {
+                        "type": "text_only",
+                        "body_md": (
+                            "Iltimos, qaysi **workspace** ustida ishlashni "
+                            "tanlang — yo dropdown'dan, yoki xabar matnida "
+                            "`@workspace-nomi` yozib yuboring."
+                        ),
+                    }
+                },
+            )
+
+        return StreamingResponse(_clarify_stream(), media_type="text/event-stream")
+
     chat_session = await _ensure_session(
         session, current_user, payload.session_id, workspace_id
     )

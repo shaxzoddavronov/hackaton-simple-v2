@@ -1,11 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { CodeBlock } from "@/components/CodeBlock";
 import { GlassPanel } from "@/components/GlassPanel";
-import { api, getToken } from "@/lib/api";
+import { api, getToken, testConnection, type TestConnectionResult } from "@/lib/api";
 
 type Dialect = "postgres" | "sqlite";
 
@@ -35,9 +35,48 @@ export default function NewWorkspacePage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<TestConnectionResult | null>(null);
 
   if (typeof window !== "undefined" && !getToken()) {
     router.replace("/login");
+  }
+
+  // Editing any connection field invalidates the cached test result —
+  // otherwise users could test once with good creds, then sneak in a
+  // bad host and click Create. The backend also re-tests, so this is
+  // belt + suspenders, but it makes the UI honest.
+  useEffect(() => {
+    setTestResult(null);
+  }, [dialect, host, port, dbName, path, ssl, user, password]);
+
+  function buildPayload() {
+    const connection_meta =
+      dialect === "postgres"
+        ? { host, port: Number(port), db_name: dbName, ssl }
+        : { path };
+    const credentials =
+      dialect === "postgres" ? { user, password } : {};
+    const auth_kind = dialect === "postgres" ? "password" : "none";
+    return { dialect, connection_meta, credentials, auth_kind } as const;
+  }
+
+  async function runTest() {
+    setError(null);
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const result = await testConnection(buildPayload());
+      setTestResult(result);
+    } catch (err) {
+      setTestResult({
+        ok: false,
+        error: err instanceof Error ? err.message : "Test request failed",
+        error_kind: "other",
+      });
+    } finally {
+      setTesting(false);
+    }
   }
 
   async function submit(e: React.FormEvent) {
@@ -45,30 +84,32 @@ export default function NewWorkspacePage() {
     setError(null);
     setBusy(true);
     try {
-      const connection_meta =
-        dialect === "postgres"
-          ? { host, port: Number(port), db_name: dbName, ssl }
-          : { path };
-      const credentials =
-        dialect === "postgres" ? { user, password } : {};
-      const auth_kind = dialect === "postgres" ? "password" : "none";
       await api("/workspaces", {
         method: "POST",
         body: JSON.stringify({
           name,
-          dialect,
-          connection_meta,
-          credentials,
-          auth_kind,
+          ...buildPayload(),
         }),
       });
       router.push("/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create workspace");
+      // The backend gates creation on a successful connection probe
+      // (workspaces.py::create_workspace) and returns 422 with a
+      // structured detail when the probe fails. Surface that here.
+      const msg = err instanceof Error ? err.message : "Failed to create workspace";
+      const parsed = tryParseConnectionFailure(msg);
+      if (parsed) {
+        setTestResult({ ok: false, error: parsed.message, error_kind: parsed.kind });
+        setError(`Cannot create workspace: ${parsed.message}`);
+      } else {
+        setError(msg);
+      }
     } finally {
       setBusy(false);
     }
   }
+
+  const canCreate = !!name && testResult?.ok === true && !busy && !testing;
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8 space-y-6">
@@ -183,14 +224,39 @@ export default function NewWorkspacePage() {
             </Field>
           )}
 
+          <TestConnectionPanel result={testResult} testing={testing} />
+
           {error ? <div className="text-error text-sm">{error}</div> : null}
-          <button
-            type="submit"
-            disabled={busy}
-            className="w-full rounded-xl bg-primary-container text-on-primary-container py-2 font-semibold disabled:opacity-50"
-          >
-            {busy ? "Creating…" : "Create workspace"}
-          </button>
+
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              onClick={runTest}
+              disabled={testing || busy}
+              className="flex-1 rounded-xl bg-surface-container-high/60 border border-outline/20 text-on-surface py-2 font-semibold disabled:opacity-50"
+            >
+              {testing ? "Testing…" : "Test connection"}
+            </button>
+            <button
+              type="submit"
+              disabled={!canCreate}
+              title={
+                !testResult?.ok
+                  ? "Run a successful Test connection first"
+                  : ""
+              }
+              className="flex-1 rounded-xl bg-primary-container text-on-primary-container py-2 font-semibold disabled:opacity-50"
+            >
+              {busy ? "Creating…" : "Create workspace"}
+            </button>
+          </div>
+          {!testResult?.ok ? (
+            <p className="text-on-surface-variant text-xs">
+              Avval <b>Test connection</b> bilan ulanish ishlashiga ishonch hosil
+              qiling. Ulanmagan ma&apos;lumotlar bazasi workspace ro&apos;yxatiga
+              qo&apos;shilmaydi.
+            </p>
+          ) : null}
         </GlassPanel>
 
         <GlassPanel className="px-5 py-4">
@@ -216,6 +282,89 @@ export default function NewWorkspacePage() {
       `}</style>
     </main>
   );
+}
+
+function TestConnectionPanel({
+  result,
+  testing,
+}: {
+  result: TestConnectionResult | null;
+  testing: boolean;
+}) {
+  if (testing) {
+    return (
+      <div className="rounded-xl border border-outline/20 bg-surface-container-high/40 px-3 py-2 text-on-surface-variant text-sm">
+        Connecting…
+      </div>
+    );
+  }
+  if (!result) return null;
+  if (result.ok) {
+    const tables = result.table_names_preview ?? [];
+    return (
+      <div className="rounded-xl border border-tertiary/40 bg-tertiary/10 px-3 py-2 text-sm space-y-1">
+        <div className="text-tertiary font-semibold">
+          ✓ Connection OK · {result.table_count ?? 0} tables found
+        </div>
+        {tables.length ? (
+          <div className="text-on-surface-variant text-xs">
+            {tables.join(", ")}
+            {(result.table_count ?? 0) > tables.length ? ", …" : ""}
+          </div>
+        ) : (
+          <div className="text-on-surface-variant text-xs">
+            (No tables found — workspace can still be created, but you may
+            have pointed at an empty schema.)
+          </div>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-xl border border-error/40 bg-error/10 px-3 py-2 text-sm space-y-1">
+      <div className="text-error font-semibold">
+        ✗ {(result.error_kind ?? "error").toUpperCase()}: {result.error}
+      </div>
+      <div className="text-on-surface-variant text-xs">
+        {hintFor(result.error_kind)}
+      </div>
+    </div>
+  );
+}
+
+function hintFor(kind: TestConnectionResult["error_kind"]): string {
+  switch (kind) {
+    case "auth":
+      return "User/password noto'g'ri yoki rolega kerakli grantlar yo'q.";
+    case "network":
+      return "Host yoki port noto'g'ri, yoki firewall ulanishni bloklayapti.";
+    case "timeout":
+      return "Server javob bermadi — VPN, network, yoki DB load tekshiring.";
+    case "config":
+      return "Connection parametrlari to'liq emas (host/port/db/user/password).";
+    default:
+      return "DB log'larini tekshiring.";
+  }
+}
+
+function tryParseConnectionFailure(
+  message: string,
+): { kind: TestConnectionResult["error_kind"]; message: string } | null {
+  // FastAPI returns errors as "422 ... : {"detail":{"code":"connection_auth","message":"..."}}"
+  const idx = message.indexOf("{");
+  if (idx < 0) return null;
+  try {
+    const payload = JSON.parse(message.slice(idx)) as {
+      detail?: { code?: string; message?: string };
+    };
+    const detail = payload.detail;
+    if (!detail) return null;
+    const kind = (detail.code || "")
+      .replace(/^connection_/, "") as TestConnectionResult["error_kind"];
+    return { kind: kind || "other", message: detail.message || "Connection failed" };
+  } catch {
+    return null;
+  }
 }
 
 function Field({

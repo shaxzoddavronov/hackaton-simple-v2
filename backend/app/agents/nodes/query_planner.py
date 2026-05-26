@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import logging
+
+from pydantic import ValidationError
+
 from app.agents.llm import get_llm
 from app.agents.state import GraphState
 from app.engines.base import SchemaBundle
 from app.schemas.llm_io import SqlPlan
+
+log = logging.getLogger(__name__)
 
 _SYSTEM = (
     "You are a SQL planner for a strict READ-ONLY analytics tool. "
@@ -96,13 +102,38 @@ async def run(state: GraphState) -> GraphState:
     )
 
     llm = get_llm()
-    plan = await llm.structured(
-        [
-            {"role": "system", "content": _SYSTEM},
-            {"role": "user", "content": prompt_user},
-        ],
-        SqlPlan,
-    )
+    try:
+        plan = await llm.structured(
+            [
+                {"role": "system", "content": _SYSTEM},
+                {"role": "user", "content": prompt_user},
+            ],
+            SqlPlan,
+        )
+    except ValidationError as e:
+        # LLMClient already tried salvage + a repair turn. We still
+        # failed schema validation — feed the failure back into the
+        # retry loop with a concrete message so the next attempt can
+        # course-correct. Returning an empty plan steers
+        # `_route_after_validation` to either retry or, on exhaustion,
+        # error_responder. Note: no ``plan`` field is set, so validator
+        # sees nothing to validate and the router checks attempts.
+        err_summary = "; ".join(
+            f"{'.'.join(str(x) for x in (it.get('loc') or []))}: {it.get('msg')}"
+            for it in e.errors()[:3]
+        ) or str(e)[:300]
+        log.warning("planner: schema validation failed after repair: %s", err_summary)
+        return {
+            "planner_attempts": attempts,
+            "plan": None,
+            "validation": None,
+            "last_validation_error": (
+                "LLM returned JSON that doesn't match the SqlPlan schema. "
+                f"Errors: {err_summary}. Try again — return ONLY a single "
+                "JSON object with keys: dialect, sql, rationale, expected_columns."
+            ),
+            "last_executor_error": None,
+        }
     return {
         "plan": plan,
         "planner_attempts": attempts,

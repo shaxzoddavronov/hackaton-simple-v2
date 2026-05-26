@@ -84,10 +84,17 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # The frontend dev server runs on :3000 (Next.js default).
+    # Allowed origins come from Settings.CORS_ORIGINS so dev (:3001) and
+    # any prod host can both work without code edits. NOTE: when
+    # ``allow_credentials=True`` you MUST list explicit origins —
+    # browsers reject ``Access-Control-Allow-Origin: *`` in combination
+    # with credentials, which silently breaks every fetch from the SPA.
+    origins = [
+        o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()
+    ]
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

@@ -72,6 +72,27 @@ export async function registerUser(
   });
 }
 
+export type TestConnectionResult = {
+  ok: boolean;
+  dialect?: string | null;
+  table_count?: number | null;
+  table_names_preview?: string[] | null;
+  error?: string | null;
+  error_kind?: "auth" | "network" | "timeout" | "config" | "other" | null;
+};
+
+export async function testConnection(payload: {
+  dialect: "postgres" | "sqlite";
+  connection_meta: Record<string, unknown>;
+  credentials: Record<string, string>;
+  auth_kind: "password" | "dsn" | "iam" | "none";
+}): Promise<TestConnectionResult> {
+  return api<TestConnectionResult>("/workspaces/test-connection", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export type SseEvent = { event: string; data: unknown };
 
 /**

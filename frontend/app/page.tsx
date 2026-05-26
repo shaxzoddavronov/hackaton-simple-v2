@@ -106,7 +106,10 @@ export default function WorkspacesPage() {
                 >
                   Schema
                 </Link>
-                <Link href="/chat" className="text-primary hover:underline">
+                <Link
+                  href={`/chat?workspace=${w.id}`}
+                  className="text-primary hover:underline"
+                >
                   Open chat
                 </Link>
               </div>
