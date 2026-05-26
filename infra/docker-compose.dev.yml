@@ -7,7 +7,10 @@
 
 services:
   postgres:
-    image: postgres:16-alpine
+    # Drop-in replacement for postgres:16 that ships the `vector` extension
+    # required by the RAG layer (migration 0002_rag). pgcrypto is also
+    # present, so the existing init script keeps working.
+    image: pgvector/pgvector:pg16
     container_name: qm_postgres
     environment:
       POSTGRES_DB: querymind
@@ -63,6 +66,38 @@ services:
   #           - driver: nvidia
   #             count: 1
   #             capabilities: ["gpu"]
+  #   networks:
+  #     - qm_dev
+
+  # Triton Inference Server — serves the bge-m3 embedding model used by RAG.
+  # Drop your packaged model into ./triton-models/bge_m3/ (see infra/README.md
+  # for the expected layout) and uncomment. The agent runs without it via
+  # BM25 fallback, but RAG-quality retrieval requires it.
+  #
+  # triton:
+  #   image: nvcr.io/nvidia/tritonserver:24.06-py3
+  #   container_name: qm_triton
+  #   command: >
+  #     tritonserver --model-repository=/models
+  #     --http-port=8001
+  #     --strict-model-config=false
+  #   ports:
+  #     - "8001:8001"   # HTTP — matches Settings.TRITON_URL default
+  #     - "8002:8002"   # metrics
+  #   volumes:
+  #     - ./triton-models:/models:ro
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: ["gpu"]
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8001/v2/health/ready"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 10
   #   networks:
   #     - qm_dev
 

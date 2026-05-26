@@ -4,6 +4,7 @@
 # Web framework
 fastapi
 uvicorn[standard]
+python-multipart
 
 # ORM + drivers
 sqlalchemy[asyncio]>=2.0
@@ -12,12 +13,14 @@ aiosqlite
 alembic
 
 # Config / validation
-pydantic>=2
+pydantic[email]>=2
 pydantic-settings
 
 # Auth / crypto
 python-jose[cryptography]
+# passlib 1.7.4 doesn't tolerate bcrypt>=5 — pin until passlib ships a fix.
 passlib[bcrypt]
+bcrypt<5
 cryptography
 
 # Background jobs
@@ -26,6 +29,10 @@ redis
 
 # SQL parsing (used by the read-only validator)
 sqlglot
+
+# RAG: pgvector adapter (Postgres only — SQLite tests use JSON column).
+# Optional at unit-test time; required when running against Postgres.
+pgvector
 
 # HTTP client + OpenAI-compatible vLLM client
 httpx

@@ -51,6 +51,12 @@ async def _run_async(workspace_id: UUID, profile_job_id: UUID) -> dict[str, obje
                 await qe.aclose()
                 await _persist_bundle(session, workspace_id, bundle)
                 await _mark_succeeded(session, profile_job_id, workspace_id)
+                # Newly-profiled workspace → kick off a full RAG reindex
+                # so the agent can immediately reason over this schema.
+                # Local import avoids a circular import at module load time
+                # (index_task imports celery_app, which imports us).
+                from app.workers.index_task import run_index_workspace
+                run_index_workspace.delay(str(workspace_id))
                 return {"ok": True, "tables": len(bundle.tables)}
             except Exception as e:
                 log.exception("profile job failed for workspace %s", workspace_id)

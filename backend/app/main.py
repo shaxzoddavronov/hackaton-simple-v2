@@ -14,7 +14,14 @@ import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, chat, schema, settings as settings_router, workspaces
+from app.api import (
+    auth,
+    chat,
+    documents,
+    schema,
+    settings as settings_router,
+    workspaces,
+)
 from app.config import settings
 from app.db.session import engine
 from app.engines import register_all as register_engines
@@ -80,7 +87,7 @@ def create_app() -> FastAPI:
     # The frontend dev server runs on :3000 (Next.js default).
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000"],
+        allow_origins=["*"],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -92,6 +99,7 @@ def create_app() -> FastAPI:
     app.include_router(chat.router)
     app.include_router(schema.router)
     app.include_router(settings_router.router)
+    app.include_router(documents.router)
 
     @app.get("/healthz", tags=["health"], include_in_schema=False)
     async def healthz() -> dict[str, str]:

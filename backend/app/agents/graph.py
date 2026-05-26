@@ -11,6 +11,7 @@ from app.agents.nodes import (
     query_executor,
     query_planner,
     query_validator,
+    rag_retriever,
     schema_loader,
 )
 from app.agents.state import GraphState
@@ -38,7 +39,9 @@ def _route_after_schema(state: GraphState) -> str:
     intent = state.get("intent", "")
     if intent == "metadata":
         return "answer_writer"
-    return "query_planner"
+    # data_query / dashboard → go through RAG before planning so the planner
+    # gets semantically pruned tables + retrieved API/doc context.
+    return "rag_retriever"
 
 
 def _route_after_validation(state: GraphState) -> str:
@@ -64,6 +67,7 @@ def build_graph():
 
     g.add_node("coordinator", coordinator.run)
     g.add_node("schema_loader", schema_loader.run)
+    g.add_node("rag_retriever", rag_retriever.run)
     g.add_node("query_planner", query_planner.run)
     g.add_node("query_validator", query_validator.run)
     g.add_node("query_executor", query_executor.run)
@@ -89,11 +93,12 @@ def build_graph():
         _route_after_schema,
         {
             "answer_writer": "answer_writer",
-            "query_planner": "query_planner",
+            "rag_retriever": "rag_retriever",
             "error_responder": "error_responder",
         },
     )
 
+    g.add_edge("rag_retriever", "query_planner")
     g.add_edge("query_planner", "query_validator")
 
     g.add_conditional_edges(
