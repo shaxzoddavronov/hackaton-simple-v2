@@ -1,28 +1,79 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 import { GlassPanel } from "@/components/GlassPanel";
 import { MessageBubble } from "@/components/MessageBubble";
-import { getToken, streamChat } from "@/lib/api";
+import { api, getToken, streamChat } from "@/lib/api";
 import type { ChatMessage, UISpec } from "@/lib/types";
 
+type WorkspaceOut = {
+  id: string;
+  name: string;
+  dialect: string;
+  status: string;
+};
+
+const ACTIVE_WS_KEY = "qm_active_workspace";
+
 export default function ChatPage() {
+  const search = useSearchParams();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [streaming, setStreaming] = useState(false);
   const [authMissing, setAuthMissing] = useState(false);
   const [activeNode, setActiveNode] = useState<string | null>(null);
+  const [workspaces, setWorkspaces] = useState<WorkspaceOut[] | null>(null);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(
+    null,
+  );
   const endRef = useRef<HTMLDivElement>(null);
 
+  // Decide which workspace to pre-select. Priority: ?workspace=<id> in the
+  // URL (when navigating from the workspaces page) > the last one used in
+  // this browser (localStorage) > the first 'ready' workspace from the API.
   useEffect(() => {
-    setAuthMissing(!getToken());
-  }, []);
+    if (!getToken()) {
+      setAuthMissing(true);
+      return;
+    }
+    api<WorkspaceOut[]>("/workspaces")
+      .then((items) => {
+        setWorkspaces(items);
+        const fromUrl = search.get("workspace");
+        const fromStorage =
+          typeof window !== "undefined"
+            ? window.localStorage.getItem(ACTIVE_WS_KEY)
+            : null;
+        const ready = items.find((w) => w.status === "ready");
+        const candidate =
+          (fromUrl && items.find((w) => w.id === fromUrl)?.id) ||
+          (fromStorage && items.find((w) => w.id === fromStorage)?.id) ||
+          ready?.id ||
+          items[0]?.id ||
+          null;
+        if (candidate) {
+          setActiveWorkspaceId(candidate);
+          window.localStorage.setItem(ACTIVE_WS_KEY, candidate);
+        }
+      })
+      .catch(() => setWorkspaces([]));
+  }, [search]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, activeNode]);
+
+  function pickWorkspace(id: string) {
+    setActiveWorkspaceId(id);
+    setSessionId(null); // start a fresh session when switching workspaces
+    setMessages([]);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(ACTIVE_WS_KEY, id);
+    }
+  }
 
   if (authMissing) {
     return (
@@ -40,6 +91,22 @@ export default function ChatPage() {
 
   async function send() {
     if (!input.trim() || streaming) return;
+    if (!activeWorkspaceId) {
+      setMessages((m) => [
+        ...m,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: "",
+          ui_spec: {
+            type: "text_only",
+            body_md:
+              "Workspace tanlanmagan. Yuqoridagi tanlovdan birini tanlang yoki avval **Connect database** orqali yarating.",
+          },
+        },
+      ]);
+      return;
+    }
     const userText = input.trim();
     setInput("");
     setMessages((m) => [
@@ -55,7 +122,11 @@ export default function ChatPage() {
 
     try {
       await streamChat(
-        { message: userText, session_id: sessionId, active_workspace_id: null },
+        {
+          message: userText,
+          session_id: sessionId,
+          active_workspace_id: activeWorkspaceId,
+        },
         (evt) => {
           if (evt.event === "session" && evt.data && typeof evt.data === "object") {
             const d = evt.data as { session_id?: string };
@@ -102,13 +173,54 @@ export default function ChatPage() {
     }
   }
 
+  const activeWs =
+    workspaces?.find((w) => w.id === activeWorkspaceId) ?? null;
+
   return (
     <main className="mx-auto max-w-3xl px-4 py-8 flex flex-col h-screen">
-      <header className="mb-4">
-        <h1 className="font-headline text-2xl text-on-surface">Neural Chat</h1>
-        <p className="text-on-surface-variant text-sm">
-          Ask anything about your connected databases.
-        </p>
+      <header className="mb-4 space-y-3">
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <h1 className="font-headline text-2xl text-on-surface">
+              Neural Chat
+            </h1>
+            <p className="text-on-surface-variant text-sm">
+              Ask anything about your connected databases.
+            </p>
+          </div>
+          {workspaces && workspaces.length > 0 ? (
+            <label className="flex flex-col text-xs text-on-surface-variant gap-1">
+              <span className="uppercase tracking-wider">Workspace</span>
+              <select
+                value={activeWorkspaceId ?? ""}
+                onChange={(e) => pickWorkspace(e.target.value)}
+                className="rounded-lg bg-surface-container-high/60 px-3 py-2 text-on-surface border border-outline/20 focus:outline-none focus:border-primary"
+              >
+                {workspaces.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name} ({w.dialect}
+                    {w.status !== "ready" ? ` · ${w.status}` : ""})
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+        </div>
+        {activeWs && activeWs.status !== "ready" ? (
+          <GlassPanel className="px-4 py-2 text-on-surface-variant text-sm">
+            Workspace status: <b>{activeWs.status}</b> — profiling tugashini
+            kuting yoki <a href="/" className="text-primary underline">workspaces</a> ga qayting.
+          </GlassPanel>
+        ) : null}
+        {workspaces && workspaces.length === 0 ? (
+          <GlassPanel className="px-4 py-3 text-on-surface-variant text-sm">
+            Hech bir workspace yo'q. Avval{" "}
+            <a className="text-primary underline" href="/workspaces/new">
+              Connect database
+            </a>{" "}
+            orqali bittasini yarating.
+          </GlassPanel>
+        ) : null}
       </header>
 
       <div className="flex-1 overflow-y-auto space-y-4 pr-2">
@@ -133,13 +245,17 @@ export default function ChatPage() {
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask a question…"
+          placeholder={
+            activeWs
+              ? `Ask about ${activeWs.name}…`
+              : "Ask a question…"
+          }
           className="flex-1 rounded-xl bg-surface-container-high/60 px-4 py-2 text-on-surface border border-outline/20 focus:outline-none focus:border-primary"
-          disabled={streaming}
+          disabled={streaming || !activeWorkspaceId}
         />
         <button
           type="submit"
-          disabled={streaming || !input.trim()}
+          disabled={streaming || !input.trim() || !activeWorkspaceId}
           className="rounded-xl bg-primary-container text-on-primary-container px-4 py-2 font-semibold disabled:opacity-50"
         >
           Send

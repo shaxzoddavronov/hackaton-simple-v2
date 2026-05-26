@@ -44,6 +44,14 @@ class Settings(BaseSettings):
     # Url-safe base64-encoded 32-byte key. See `.env.example` for a generator.
     QM_MASTER_KEY: str = Field(default="REPLACE_WITH_BASE64_32_BYTE_KEY")
 
+    # --- CORS -------------------------------------------------------------------
+    # Comma-separated list of allowed origins for the frontend dev server.
+    # Default covers both :3000 (vanilla Next.js) and :3001 (used in this
+    # repo because :3000 may be taken by a local LLM UI).
+    CORS_ORIGINS: str = Field(
+        default="http://localhost:3000,http://localhost:3001"
+    )
+
     # --- Local LLM (vLLM, OpenAI-compatible) ------------------------------------
     VLLM_ENDPOINT: str = Field(default="http://localhost:8000/v1")
     VLLM_MODEL: str = Field(default="google/gemma-3-4b-it")
