@@ -119,10 +119,149 @@ services:
     #           count: 1
     #           capabilities: ["gpu"]
 
+  # ---------------------------------------------------------------------
+  # Per-dialect dev databases.
+  #
+  # The four blocks below are commented out so the default
+  # `docker compose -f infra/docker-compose.dev.yml up -d` only brings
+  # up Postgres (metadata) + Redis (Celery broker). Uncomment the
+  # service AND its matching volume in the `volumes:` section at the
+  # bottom of this file to enable a dialect locally, then re-run
+  # `docker compose up -d`.
+  #
+  # Each seed file under ./seed/ is mounted into the container's init
+  # directory and runs on first start (i.e. against an empty data
+  # volume). To re-seed, `docker compose down -v` then `up -d` again.
+  # ---------------------------------------------------------------------
+
+  # MySQL 8.4 — auto-loads ./seed/mysql_demo.sql on first start.
+  # Add-Connection form fields:
+  #   Dialect: mysql   Host: localhost  Port: 3306
+  #   Database: sales_demo   User: querymind   Password: querymind
+  # First start is fast (~10s).
+  #
+  # mysql:
+  #   image: mysql:8.4
+  #   container_name: qm_mysql
+  #   environment:
+  #     MYSQL_ROOT_PASSWORD: querymind
+  #     MYSQL_DATABASE: sales_demo
+  #     MYSQL_USER: querymind
+  #     MYSQL_PASSWORD: querymind
+  #   ports:
+  #     - "3306:3306"
+  #   volumes:
+  #     - mysql_data:/var/lib/mysql
+  #     - ./seed/mysql_demo.sql:/docker-entrypoint-initdb.d/01-seed.sql:ro
+  #   healthcheck:
+  #     test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "querymind", "-pquerymind"]
+  #     interval: 5s
+  #     timeout: 3s
+  #     retries: 20
+  #   networks:
+  #     - qm_dev
+
+  # ClickHouse 24.8 — auto-loads ./seed/clickhouse_demo.sql on first start.
+  # Add-Connection form fields:
+  #   Dialect: clickhouse   Host: localhost   Port: 8123 (HTTP)
+  #   Database: sales_demo   User: querymind   Password: querymind
+  # 9000 is the native protocol port if you prefer the native driver.
+  # First start is fast (~15s).
+  #
+  # clickhouse:
+  #   image: clickhouse/clickhouse-server:24.8
+  #   container_name: qm_clickhouse
+  #   environment:
+  #     CLICKHOUSE_DB: sales_demo
+  #     CLICKHOUSE_USER: querymind
+  #     CLICKHOUSE_PASSWORD: querymind
+  #     CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+  #   ports:
+  #     - "8123:8123"
+  #     - "9000:9000"
+  #   volumes:
+  #     - clickhouse_data:/var/lib/clickhouse
+  #     - ./seed/clickhouse_demo.sql:/docker-entrypoint-initdb.d/01-seed.sql:ro
+  #   ulimits:
+  #     nofile:
+  #       soft: 262144
+  #       hard: 262144
+  #   healthcheck:
+  #     test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8123/ping"]
+  #     interval: 5s
+  #     timeout: 3s
+  #     retries: 20
+  #   networks:
+  #     - qm_dev
+
+  # MongoDB 7 — auto-loads ./seed/mongo_demo.js on first start.
+  # Add-Connection form fields:
+  #   Dialect: mongodb   Host: localhost   Port: 27017
+  #   Database: sales_demo   User: querymind   Password: querymind
+  #   (the mongo driver also needs ?authSource=admin in the URI)
+  # First start is fast (~10s).
+  #
+  # mongodb:
+  #   image: mongo:7
+  #   container_name: qm_mongodb
+  #   environment:
+  #     MONGO_INITDB_ROOT_USERNAME: querymind
+  #     MONGO_INITDB_ROOT_PASSWORD: querymind
+  #     MONGO_INITDB_DATABASE: sales_demo
+  #   ports:
+  #     - "27017:27017"
+  #   volumes:
+  #     - mongodb_data:/data/db
+  #     - ./seed/mongo_demo.js:/docker-entrypoint-initdb.d/01-seed.js:ro
+  #   healthcheck:
+  #     test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+  #     interval: 5s
+  #     timeout: 3s
+  #     retries: 20
+  #   networks:
+  #     - qm_dev
+
+  # Oracle XE 21c — auto-loads ./seed/oracle_demo.sql on first start.
+  # Add-Connection form fields:
+  #   Dialect: oracle   Host: localhost   Port: 1521
+  #   Service: sales_demo   User: querymind   Password: querymind
+  # IMPORTANT: First start is SLOW (~2 minutes) — Oracle initializes the
+  # database on an empty volume. `docker logs -f qm_oracle` until you
+  # see "DATABASE IS READY TO USE!". Subsequent starts are ~20s.
+  #
+  # oracle:
+  #   image: gvenzl/oracle-xe:21-slim
+  #   container_name: qm_oracle
+  #   environment:
+  #     ORACLE_PASSWORD: querymind
+  #     APP_USER: querymind
+  #     APP_USER_PASSWORD: querymind
+  #     ORACLE_DATABASE: sales_demo
+  #   ports:
+  #     - "1521:1521"
+  #   volumes:
+  #     - oracle_data:/opt/oracle/oradata
+  #     - ./seed/oracle_demo.sql:/container-entrypoint-initdb.d/01-seed.sql:ro
+  #   healthcheck:
+  #     test: ["CMD", "healthcheck.sh"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 30
+  #     start_period: 120s
+  #   networks:
+  #     - qm_dev
+
 networks:
   qm_dev:
     driver: bridge
 
+# Named volumes. The four dialect-specific volumes below are commented
+# out to match their (commented) service definitions above — uncomment
+# a volume in tandem with the matching service.
 volumes:
   pgdata:
   triton_cache:
+  # mysql_data:
+  # clickhouse_data:
+  # mongodb_data:
+  # oracle_data:
