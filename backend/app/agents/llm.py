@@ -9,6 +9,7 @@ from openai import AsyncOpenAI
 from pydantic import BaseModel, ValidationError
 
 from app.config import settings
+from app.metrics import llm_calls_total
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -167,6 +168,12 @@ class LLMClient:
 
         See class docstring for the salvage + repair contract.
         """
+        # Use the response model name as the "node" label — it's the
+        # closest stable identifier we have without dragging a node
+        # name through every call site (and IntentDecision / SqlPlan /
+        # AnswerDraft map 1:1 to coordinator / planner / answer_writer
+        # anyway).
+        node_label = response_model.__name__
         schema = response_model.model_json_schema()
         completion = await self._client.chat.completions.create(
             model=self._model,
@@ -187,7 +194,9 @@ class LLMClient:
         # Stage 1: salvage.
         salvaged = _extract_first_json_object(raw)
         try:
-            return response_model.model_validate_json(salvaged)
+            parsed = response_model.model_validate_json(salvaged)
+            llm_calls_total.labels(node=node_label, outcome="ok").inc()
+            return parsed
         except ValidationError as first_err:
             log.warning(
                 "structured(%s): salvage failed, attempting repair (err=%s)",
@@ -239,7 +248,13 @@ class LLMClient:
         # Let ValidationError propagate this time; the planner retry
         # loop (MAX_PLANNER_ATTEMPTS) will surface it as
         # ``last_validation_error`` and re-prompt with feedback.
-        return response_model.model_validate_json(repaired)
+        try:
+            parsed_repaired = response_model.model_validate_json(repaired)
+            llm_calls_total.labels(node=node_label, outcome="repair").inc()
+            return parsed_repaired
+        except ValidationError:
+            llm_calls_total.labels(node=node_label, outcome="failed").inc()
+            raise
 
 
 _default_client: LLMClient | None = None
