@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { CodeBlock } from "@/components/CodeBlock";
 import { GlassPanel } from "@/components/GlassPanel";
+import { useToast } from "@/components/Toast";
 import {
   api,
   createConnection,
@@ -40,6 +41,7 @@ const STATUS_TINT: Record<string, string> = {
 export default function WorkspaceDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const toast = useToast();
   const workspaceId = params.id;
   const [workspace, setWorkspace] = useState<{ id: string; name: string } | null>(
     null,
@@ -71,13 +73,23 @@ export default function WorkspaceDetailPage() {
 
   async function onDelete(connId: string) {
     if (!window.confirm("Connection o'chirilsinmi? Schema va RAG chunklari ham yo'qoladi.")) return;
-    await deleteConnection(workspaceId, connId);
-    await refresh();
+    try {
+      await deleteConnection(workspaceId, connId);
+      toast.success("Connection removed");
+      await refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to delete connection");
+    }
   }
 
   async function onRefresh(connId: string) {
-    await refreshConnection(workspaceId, connId);
-    await refresh();
+    try {
+      await refreshConnection(workspaceId, connId);
+      toast.info("Re-profiling started");
+      await refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to refresh connection");
+    }
   }
 
   return (
@@ -228,7 +240,7 @@ function AddConnectionPanel({
   const [mongoAuth, setMongoAuth] = useState<"none" | "password">("none");
   const [mongoTls, setMongoTls] = useState(false);
   const [mongoReplicaSet, setMongoReplicaSet] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
   const [testing, setTesting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [testResult, setTestResult] = useState<TestConnectionResult | null>(
@@ -375,7 +387,6 @@ function AddConnectionPanel({
   }
 
   async function runTest() {
-    setError(null);
     setTesting(true);
     setTestResult(null);
     try {
@@ -397,13 +408,15 @@ function AddConnectionPanel({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
     setBusy(true);
     try {
       await createConnection(workspaceId, buildPayload());
+      toast.success("Connection added — profiling started");
       await onCreated();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to create connection");
+      toast.error(
+        e instanceof Error ? e.message : "Failed to create connection",
+      );
     } finally {
       setBusy(false);
     }
@@ -881,8 +894,6 @@ function AddConnectionPanel({
             </div>
           )
         ) : null}
-
-        {error ? <div className="text-error text-sm">{error}</div> : null}
 
         <div className="flex gap-2 pt-1">
           <button

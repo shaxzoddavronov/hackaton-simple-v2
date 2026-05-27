@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Space_Grotesk, Inter, JetBrains_Mono } from "next/font/google";
 import type { ReactNode } from "react";
 import { AppHeader } from "@/components/AppHeader";
+import { ToastProvider } from "@/components/Toast";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -67,8 +68,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     >
       <body className="font-body text-on-surface">
         <GlassBackground />
-        <AppHeader />
-        {children}
+        <ToastProvider>
+          <AppHeader />
+          {children}
+        </ToastProvider>
       </body>
     </html>
   );

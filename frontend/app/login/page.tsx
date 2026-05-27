@@ -5,10 +5,12 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { GlassPanel } from "@/components/GlassPanel";
+import { useToast } from "@/components/Toast";
 import { login } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
+  const toast = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +24,16 @@ export default function LoginPage() {
       await login(email, password);
       router.push("/chat");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      const msg = err instanceof Error ? err.message : "Login failed";
+      // `login()` throws `Login failed: <status>`. A 401/403 means
+      // wrong credentials — keep the inline field-level hint so the
+      // user fixes it right there. Everything else (network down,
+      // backend 5xx, fetch TypeError) becomes a toast.
+      if (/\b40[13]\b/.test(msg)) {
+        setError("Invalid email or password.");
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setLoading(false);
     }

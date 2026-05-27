@@ -5,10 +5,12 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { GlassPanel } from "@/components/GlassPanel";
+import { useToast } from "@/components/Toast";
 import { login, registerUser } from "@/lib/api";
 
 export default function RegisterPage() {
   const router = useRouter();
+  const toast = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +25,16 @@ export default function RegisterPage() {
       await login(email, password);
       router.push("/chat");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Registration failed");
+      const msg = err instanceof Error ? err.message : "Registration failed";
+      // `api()` throws `${status} ${statusText}: ${detail}`. A 409 is
+      // the "email already registered" case — the user can fix this
+      // by editing the form, so keep it inline. Everything else
+      // (network, 5xx) goes to a toast.
+      if (/^409\b/.test(msg)) {
+        setError("Email already registered.");
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setLoading(false);
     }

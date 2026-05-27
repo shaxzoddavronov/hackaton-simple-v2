@@ -4,14 +4,15 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { GlassPanel } from "@/components/GlassPanel";
+import { useToast } from "@/components/Toast";
 import { api, getToken } from "@/lib/api";
 
 type WorkspaceCreated = { id: string; name: string };
 
 export default function NewWorkspacePage() {
   const router = useRouter();
+  const toast = useToast();
   const [name, setName] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   if (typeof window !== "undefined" && !getToken()) {
@@ -20,7 +21,6 @@ export default function NewWorkspacePage() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
     setBusy(true);
     try {
       const ws = await api<WorkspaceCreated>("/workspaces", {
@@ -28,10 +28,13 @@ export default function NewWorkspacePage() {
         body: JSON.stringify({ name }),
       });
       // Jump straight to the workspace detail page so the user can
-      // add the first connection.
+      // add the first connection — the page transition is its own
+      // success signal, no toast needed here.
       router.push(`/workspaces/${ws.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create workspace");
+      toast.error(
+        err instanceof Error ? err.message : "Failed to create workspace",
+      );
     } finally {
       setBusy(false);
     }
@@ -68,7 +71,6 @@ export default function NewWorkspacePage() {
             />
           </label>
 
-          {error ? <div className="text-error text-sm">{error}</div> : null}
           <button
             type="submit"
             disabled={busy || !name.trim()}

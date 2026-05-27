@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { GlassPanel } from "@/components/GlassPanel";
 import { MessageBubble } from "@/components/MessageBubble";
+import { useToast } from "@/components/Toast";
 import {
   api,
   deleteSession,
@@ -31,6 +32,7 @@ const ACTIVE_CONN_KEY = "qm_active_connection";
 export default function ChatPage() {
   const router = useRouter();
   const search = useSearchParams();
+  const toast = useToast();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -131,9 +133,11 @@ export default function ChatPage() {
       setHistory(items);
       setHistoryError(null);
     } catch (err) {
-      setHistoryError(err instanceof Error ? err.message : "Load failed");
+      const msg = err instanceof Error ? err.message : "Load failed";
+      setHistoryError(msg);
+      toast.error(`Couldn't load chat history: ${msg}`);
     }
-  }, [activeWorkspaceId]);
+  }, [activeWorkspaceId, toast]);
 
   useEffect(() => {
     void refreshHistory();
@@ -176,7 +180,9 @@ export default function ChatPage() {
         `/chat?workspace=${detail.workspace_id ?? activeWorkspaceId ?? ""}&session=${detail.session_id}`,
       );
     } catch (err) {
-      setHistoryError(err instanceof Error ? err.message : "Load failed");
+      const msg = err instanceof Error ? err.message : "Load failed";
+      setHistoryError(msg);
+      toast.error(`Couldn't open chat session: ${msg}`);
     }
   }
 
