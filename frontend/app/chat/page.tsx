@@ -17,7 +17,7 @@ import {
   type ChatSessionSummary,
   type ConnectionSummary,
 } from "@/lib/api";
-import type { ChatMessage, UISpec } from "@/lib/types";
+import type { ChatMessage, Citation, UISpec } from "@/lib/types";
 
 type WorkspaceOut = {
   id: string;
@@ -254,6 +254,7 @@ export default function ChatPage() {
       string,
       { columns: string[]; row_count: number }
     > | null = null;
+    let finalCitations: Citation[] | null = null;
     let assistantId = crypto.randomUUID();
     let newlyCreatedSessionId: string | null = null;
 
@@ -284,6 +285,7 @@ export default function ChatPage() {
                 string,
                 { columns: string[]; row_count: number }
               > | null;
+              citations?: Citation[] | null;
             };
             finalSpec = d.ui_spec ?? null;
             finalSql = d.sql ?? null;
@@ -291,6 +293,9 @@ export default function ChatPage() {
             // turns return {} which we treat as absent.
             if (d.sub_results && Object.keys(d.sub_results).length > 0) {
               finalSubResults = d.sub_results;
+            }
+            if (d.citations && d.citations.length > 0) {
+              finalCitations = d.citations;
             }
             if (d.assistant_message_id) assistantId = d.assistant_message_id;
           } else if (evt.event === "error") {
@@ -319,6 +324,7 @@ export default function ChatPage() {
           ui_spec: finalSpec,
           sql: finalSql,
           sub_results: finalSubResults,
+          citations: finalCitations,
         },
       ]);
       // After the first message of a brand-new session, sync the URL

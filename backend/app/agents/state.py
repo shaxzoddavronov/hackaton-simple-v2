@@ -68,6 +68,11 @@ class GraphState(TypedDict, total=False):
     chart: Annotated[UISpec | None, _take_last]
     answer: Annotated[AnswerDraft | None, _take_last]
 
+    # Citations attached by ``answer_writer`` from retrieved RAG chunks
+    # (kinds: user_doc, harvested_doc). The chat SSE final event echoes
+    # this list so the UI can render "Sources" under the answer.
+    citations: Annotated[list[dict[str, Any]] | None, _take_last]
+
     # Finalizer output
     ui_spec: UISpec | None
 

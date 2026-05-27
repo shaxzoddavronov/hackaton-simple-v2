@@ -72,6 +72,15 @@ export type SubResultSummary = {
   row_count: number;
 };
 
+export type Citation = {
+  kind: "user_doc" | "harvested_doc";
+  source_id: string;
+  filename: string;
+  snippet: string;
+  chunk_index: number;
+  source_key: string;
+};
+
 export type ChatMessage = {
   id: string;
   role: "user" | "assistant" | "system";
@@ -81,6 +90,10 @@ export type ChatMessage = {
   // Federated turns: per-sub-query breakdown keyed by the planner's
   // alias for that sub-result (e.g., "orders_pg", "events_es").
   sub_results?: Record<string, SubResultSummary> | null;
+  // RAG citations: the chunks the retriever returned that the answer
+  // was grounded in. Renders under the chart as a collapsible source
+  // list with snippet previews.
+  citations?: Citation[] | null;
 };
 
 export type WorkspaceOut = {

@@ -13,6 +13,7 @@ celery_app = Celery(
         "app.workers.profile_task",
         "app.workers.index_task",
         "app.workers.diff_task",
+        "app.workers.harvest_task",
     ],
 )
 
@@ -46,6 +47,17 @@ celery_app.conf.beat_schedule = {
     # a deploy added/removed routes without anyone manually refreshing.
     "rag-daily-api-catalog": {
         "task": "app.workers.index_task.run_index_api_catalog",
+        "schedule": crontab(
+            minute=settings.RAG_DIFF_CHECK_MINUTE_UTC,
+            hour=settings.RAG_DIFF_CHECK_HOUR_UTC,
+        ),
+    },
+    # Phase 15 — daily re-crawl of every registered DocSource. Mount /
+    # OneDrive / DB-column references are crawled fresh once a day so
+    # newly added documents land in RAG without the user clicking
+    # "Crawl now". Skips DocSources currently in 'harvesting' state.
+    "doc-sources-daily-recrawl": {
+        "task": "app.workers.harvest_task.run_daily_doc_recrawl",
         "schedule": crontab(
             minute=settings.RAG_DIFF_CHECK_MINUTE_UTC,
             hour=settings.RAG_DIFF_CHECK_HOUR_UTC,

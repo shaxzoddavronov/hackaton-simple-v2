@@ -28,7 +28,56 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
       {message.sql ? (
         <CodeBlock language="sql" code={message.sql} collapsible />
       ) : null}
+      {message.citations && message.citations.length ? (
+        <CitationsList citations={message.citations} />
+      ) : null}
     </div>
+  );
+}
+
+function CitationsList({
+  citations,
+}: {
+  citations: NonNullable<ChatMessage["citations"]>;
+}) {
+  return (
+    <details className="text-sm group">
+      <summary className="cursor-pointer text-on-surface-variant hover:text-on-surface flex items-center gap-2 select-none">
+        <span className="uppercase tracking-wider text-xs">
+          Sources · {citations.length}
+        </span>
+        <span className="text-xs opacity-60">
+          (click to expand snippets)
+        </span>
+      </summary>
+      <ol className="mt-2 space-y-2">
+        {citations.map((c, i) => (
+          <li
+            key={c.source_key}
+            className="rounded-xl border border-outline/20 bg-surface-container-high/30 px-3 py-2"
+          >
+            <div className="flex items-baseline gap-2">
+              <span className="text-xs font-mono text-primary">
+                [{i + 1}]
+              </span>
+              <span className="font-semibold text-on-surface text-sm">
+                {c.filename}
+              </span>
+              <span className="text-xs text-on-surface-variant uppercase tracking-wider">
+                {c.kind === "harvested_doc" ? "Harvested" : "Uploaded"}
+                {" · chunk "}
+                {c.chunk_index + 1}
+              </span>
+            </div>
+            {c.snippet ? (
+              <p className="mt-1 text-on-surface-variant text-xs leading-relaxed">
+                {c.snippet}
+              </p>
+            ) : null}
+          </li>
+        ))}
+      </ol>
+    </details>
   );
 }
 

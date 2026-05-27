@@ -4,6 +4,10 @@ from app.agents.llm import get_llm
 from app.agents.state import GraphState
 from app.engines.base import ResultSet, SchemaBundle
 from app.schemas.llm_io import AnswerDraft
+from app.services.rag.citations import (
+    build_citations,
+    citation_hint_for_planner,
+)
 
 _SYSTEM = (
     "You are an analyst who writes 2-3 sentence summaries of SQL results. "
@@ -83,6 +87,11 @@ async def run(state: GraphState) -> GraphState:
 
     history = state.get("conversation_history") or []
 
+    # Build the citation digest once — used by all three branches
+    # (metadata / chitchat with docs / data result).
+    citations = build_citations(state.get("retrieved_chunks") or [])
+    citation_hint = citation_hint_for_planner(citations)
+
     def _with_history(system: str, user_prompt: str) -> list[dict[str, object]]:
         msgs: list[dict[str, object]] = [{"role": "system", "content": system}]
         for h in history[-6:]:
@@ -93,6 +102,16 @@ async def run(state: GraphState) -> GraphState:
             msgs.append({"role": role, "content": content})
         msgs.append({"role": "user", "content": user_prompt})
         return msgs
+
+    def _append_citation_hint(prompt: str) -> str:
+        if not citation_hint:
+            return prompt
+        return (
+            f"{prompt}\n\n{citation_hint}\n\n"
+            "If you reference a source, cite by [number] inline — e.g. "
+            "'Per the HR handbook [1], …'. Stay concise; do not list all "
+            "sources unless asked."
+        )
 
     # ── Metadata / chitchat path ─────────────────────────────────────
     if rs is None and intent in {"chitchat", "metadata"}:
@@ -125,14 +144,20 @@ async def run(state: GraphState) -> GraphState:
         # ~800-char target so we don't truncate mid-string and trip
         # the salvage layer.
         draft = await llm.structured(
-            _with_history(system_prompt, user_prompt),
+            _with_history(system_prompt, _append_citation_hint(user_prompt)),
             AnswerDraft,
             max_tokens=2048,
         )
-        return {"answer": draft}
+        return {"answer": draft, "citations": citations}
 
     if rs is None:
-        return {"answer": AnswerDraft(headline="No result.", body_md="The query returned no rows.")}
+        return {
+            "answer": AnswerDraft(
+                headline="No result.",
+                body_md="The query returned no rows.",
+            ),
+            "citations": citations,
+        }
 
     llm = get_llm()
     prompt = (
@@ -141,8 +166,8 @@ async def run(state: GraphState) -> GraphState:
         "Return an AnswerDraft in the user's language."
     )
     draft = await llm.structured(
-        _with_history(_SYSTEM, prompt),
+        _with_history(_SYSTEM, _append_citation_hint(prompt)),
         AnswerDraft,
         max_tokens=2048,
     )
-    return {"answer": draft}
+    return {"answer": draft, "citations": citations}

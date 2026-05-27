@@ -302,6 +302,7 @@ async def post_chat(
             # the UI can show "Queried: pg-quiz · 12 rows, es-search · 30 rows"
             # above the chart. Empty / missing on single-DB turns.
             sub_results = final_state.get("sub_results") or {}
+            citations = final_state.get("citations") or []
             yield _sse(
                 "final",
                 {
@@ -309,6 +310,7 @@ async def post_chat(
                     "sql": sql_executed,
                     "assistant_message_id": str(assistant_msg.id),
                     "sub_results": sub_results,
+                    "citations": citations,
                 },
             )
             log.info("[%s] chat.stream END", trace)

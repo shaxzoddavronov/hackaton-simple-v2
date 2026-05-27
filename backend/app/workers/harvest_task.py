@@ -168,4 +168,51 @@ async def _harvest_async(source_id: UUID) -> dict[str, int]:
         await engine.dispose()
 
 
-__all__ = ["run_harvest_doc_source"]
+@celery_app.task(
+    name="app.workers.harvest_task.run_daily_doc_recrawl",
+    bind=True,
+)
+def run_daily_doc_recrawl(self) -> dict[str, int]:
+    """Enumerate every registered DocSource and enqueue a fresh crawl.
+
+    Phase 15: keeps mount / OneDrive / DB-column reference indexes
+    fresh without users clicking 'Crawl now'. Skips sources currently
+    in ``status='harvesting'`` so we don't pile up duplicate jobs.
+
+    Returns ``{"enqueued": N, "skipped_active": M}`` for observability.
+    """
+    return asyncio.run(_daily_recrawl_async())
+
+
+async def _daily_recrawl_async() -> dict[str, int]:
+    from sqlalchemy import select
+
+    from app.db.models import DocSource
+
+    engine = create_async_engine(settings.DATABASE_URL, pool_pre_ping=True)
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+    enqueued = 0
+    skipped = 0
+    try:
+        async with Session() as session:
+            rows = await session.execute(select(DocSource))
+            for src in rows.scalars().all():
+                if src.status == "harvesting":
+                    skipped += 1
+                    continue
+                # Re-enqueue via the same .delay() entrypoint the API
+                # uses. Decoupling the enumeration from execution means
+                # Celery worker concurrency caps the actual work.
+                run_harvest_doc_source.delay(str(src.id))
+                enqueued += 1
+    finally:
+        await engine.dispose()
+    log.info(
+        "doc-sources-daily-recrawl: enqueued=%d skipped_active=%d",
+        enqueued,
+        skipped,
+    )
+    return {"enqueued": enqueued, "skipped_active": skipped}
+
+
+__all__ = ["run_harvest_doc_source", "run_daily_doc_recrawl"]
