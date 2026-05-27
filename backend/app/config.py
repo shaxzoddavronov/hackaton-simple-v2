@@ -84,6 +84,14 @@ class Settings(BaseSettings):
     RAG_DIFF_CHECK_HOUR_UTC: int = Field(default=0, ge=0, le=23)
     RAG_DIFF_CHECK_MINUTE_UTC: int = Field(default=0, ge=0, le=59)
 
+    # --- Federation ------------------------------------------------------------
+    # Per-connection table cap in the federated_planner prompt. Keeps the
+    # token budget bounded when a workspace has many large DBs.
+    FEDERATED_TOP_K: int = Field(default=6, ge=1)
+    # Hard cap on the post-merge ResultSet. A bad join can multiply row
+    # counts; we truncate at this many rows and set `truncated=True`.
+    FEDERATION_MAX_ROWS: int = Field(default=1000, ge=1)
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

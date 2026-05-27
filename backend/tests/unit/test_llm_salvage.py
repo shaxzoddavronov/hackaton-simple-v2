@@ -61,12 +61,22 @@ def test_ignores_braces_inside_strings() -> None:
     assert "a}b" in parsed.sql
 
 
-def test_unbalanced_input_returns_trimmed_text() -> None:
-    payload = '   {"dialect":"postgres", "sql":"oh no'  # no closing brace
+def test_unbalanced_input_gets_patched_to_parseable() -> None:
+    """Salvager now patches unbalanced JSON instead of giving up.
+
+    The pydantic validator still fails on this specific payload because
+    ``dialect="postgres"`` is fine but the patched ``sql`` value will
+    be ``"oh no"`` — _Demo demands ``sql: str`` so validation succeeds.
+    The point of this test is that **parsing** no longer fails outright;
+    schema-level errors (if any) are the only remaining failure mode.
+    """
+    payload = '   {"dialect":"postgres", "sql":"oh no'  # truncated mid-string
     out = _extract_first_json_object(payload)
-    # Salvage gives up gracefully; caller's pydantic will fail with a clear msg.
-    with pytest.raises((ValidationError, ValueError)):
-        _Demo.model_validate_json(out)
+    parsed = json.loads(out)  # MUST parse
+    assert parsed["dialect"] == "postgres"
+    assert parsed["sql"] == "oh no"
+    # And it round-trips through pydantic just fine.
+    assert _Demo.model_validate_json(out).sql == "oh no"
 
 
 def test_empty_input_passes_through() -> None:
@@ -81,3 +91,58 @@ def test_nested_object_returns_outermost() -> None:
     out = _extract_first_json_object(payload)
     parsed = json.loads(out)
     assert parsed["meta"]["b"]["c"] == 2
+
+
+# ── Truncation salvage — mid-string / mid-object ────────────────────
+
+
+def test_truncated_mid_string_gets_closed() -> None:
+    """Real failure pattern observed in prod: AnswerDraft cut off
+    mid-body. The salvager should produce parseable JSON so the user
+    sees a partial answer rather than a crash."""
+    payload = (
+        '{"headline":"Schema overview","body_md":"The DB has users and '
+        'orders. Each user has many ord'
+    )
+    out = _extract_first_json_object(payload)
+    parsed = json.loads(out)  # MUST parse
+    assert parsed["headline"] == "Schema overview"
+    assert parsed["body_md"].startswith("The DB has users")
+
+
+def test_truncated_mid_string_with_unicode() -> None:
+    payload = (
+        '{"headline":"Maʼlumot","body_md":"Foydalanuvchilar va ularning '
+        'darajalari (student_analysis'
+    )
+    out = _extract_first_json_object(payload)
+    parsed = json.loads(out)
+    assert "Foydalanuvchilar" in parsed["body_md"]
+
+
+def test_truncated_inside_nested_object() -> None:
+    payload = '{"a":1,"b":{"c":2,"d":{"e":3'
+    out = _extract_first_json_object(payload)
+    parsed = json.loads(out)
+    assert parsed["b"]["d"]["e"] == 3
+
+
+def test_truncated_inside_array() -> None:
+    payload = '{"items":["a","b","c'
+    out = _extract_first_json_object(payload)
+    parsed = json.loads(out)
+    assert parsed["items"] == ["a", "b", "c"]
+
+
+def test_truncated_after_colon_inserts_null() -> None:
+    payload = '{"key":'
+    out = _extract_first_json_object(payload)
+    parsed = json.loads(out)
+    assert parsed["key"] is None
+
+
+def test_truncated_after_trailing_comma_dropped() -> None:
+    payload = '{"a":1,"b":2,'
+    out = _extract_first_json_object(payload)
+    parsed = json.loads(out)
+    assert parsed == {"a": 1, "b": 2}

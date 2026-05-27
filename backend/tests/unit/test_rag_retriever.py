@@ -88,9 +88,10 @@ async def session():
         )
         await conn.exec_driver_sql(
             "CREATE TABLE rag_chunks ("
-            "id TEXT PRIMARY KEY, workspace_id TEXT, document_id TEXT, "
-            "kind TEXT NOT NULL, source_key TEXT NOT NULL, text TEXT NOT NULL, "
-            "embedding JSON, chunk_metadata JSON NOT NULL DEFAULT '{}', "
+            "id TEXT PRIMARY KEY, workspace_id TEXT, connection_id TEXT, "
+            "document_id TEXT, kind TEXT NOT NULL, source_key TEXT NOT NULL, "
+            "text TEXT NOT NULL, embedding JSON, "
+            "chunk_metadata JSON NOT NULL DEFAULT '{}', "
             "content_hash TEXT NOT NULL, updated_at TIMESTAMP)"
         )
     Session = async_sessionmaker(engine, expire_on_commit=False)

@@ -1,52 +1,31 @@
 "use client";
 
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { GlassPanel } from "@/components/GlassPanel";
 import { api, getToken } from "@/lib/api";
 
-type Sample = {
-  distinct_values?: unknown[] | null;
-  distinct_truncated?: boolean;
-  numeric_stats?: Record<string, number> | null;
-  sample_rows?: unknown[] | null;
-  non_null_count?: number | null;
-};
-type Column = {
+type Item = {
+  connection_id: string;
   name: string;
-  data_type: string;
-  nullable: boolean;
-  is_pk?: boolean;
-  is_id?: boolean;
-  fk_to?: string | null;
-};
-type Table = {
-  schema: string;
-  name: string;
-  columns: Column[];
-  foreign_keys: { from_columns: string[]; to_table: string; to_columns: string[] }[];
-  row_count_estimate?: number | null;
-};
-type Bundle = {
   dialect: string;
-  tables: Table[];
-  samples: Record<string, Record<string, Sample>>;
+  status: string;
+  bundle_ready: boolean;
+  table_count: number | null;
 };
 type Resp = {
   workspace_id: string;
-  status: string;
-  bundle: Bundle | null;
-  message?: string;
-  refreshed_at?: string;
+  name: string;
+  connections: Item[];
 };
 
-export default function SchemaPage() {
+export default function WorkspaceSchemaIndexPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const [data, setData] = useState<Resp | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
 
   useEffect(() => {
     if (!getToken()) {
@@ -54,167 +33,80 @@ export default function SchemaPage() {
       return;
     }
     api<Resp>(`/workspaces/${params.id}/schema`)
-      .then((d) => {
-        setData(d);
-        if (d.bundle?.tables.length) {
-          setSelected(`${d.bundle.tables[0].schema}.${d.bundle.tables[0].name}`);
-        }
-      })
+      .then(setData)
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"));
   }, [params.id, router]);
 
-  if (error) return <PageShell><GlassPanel className="px-5 py-4 text-error">{error}</GlassPanel></PageShell>;
-  if (!data) return <PageShell><GlassPanel className="px-5 py-4 text-on-surface-variant">Loading…</GlassPanel></PageShell>;
-  if (!data.bundle) {
-    return (
-      <PageShell>
-        <GlassPanel className="px-5 py-4">
-          <div className="text-on-surface">Status: {data.status}</div>
-          <div className="text-on-surface-variant text-sm mt-1">
-            {data.message ?? "Bundle not available."}
-          </div>
-        </GlassPanel>
-      </PageShell>
-    );
-  }
-
-  const selectedTable = data.bundle.tables.find(
-    (t) => `${t.schema}.${t.name}` === selected,
-  );
-  const samples = (selected && data.bundle.samples[selected]) || {};
-
   return (
-    <PageShell>
-      <div className="grid grid-cols-12 gap-4">
-        <GlassPanel className="col-span-4 px-3 py-3 overflow-y-auto max-h-[80vh]">
-          <div className="text-xs uppercase tracking-wider text-on-surface-variant px-2 pb-2">
-            Tables ({data.bundle.tables.length})
-          </div>
-          <ul className="space-y-0.5">
-            {data.bundle.tables.map((t) => {
-              const qn = `${t.schema}.${t.name}`;
-              const active = qn === selected;
-              return (
-                <li key={qn}>
-                  <button
-                    onClick={() => setSelected(qn)}
-                    className={
-                      "w-full text-left px-3 py-2 rounded-lg font-mono text-sm " +
-                      (active
-                        ? "bg-primary-container/30 text-primary"
-                        : "text-on-surface hover:bg-surface-container-high/30")
-                    }
-                  >
-                    {t.name}
-                    <span className="ml-2 text-xs text-on-surface-variant">
-                      {t.columns.length} cols
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </GlassPanel>
-
-        <div className="col-span-8 space-y-4">
-          {selectedTable ? (
-            <>
-              <GlassPanel className="px-5 py-4">
-                <div className="flex items-baseline justify-between">
-                  <h2 className="font-headline text-on-surface text-xl">
-                    {selectedTable.schema}.{selectedTable.name}
-                  </h2>
-                  {selectedTable.row_count_estimate != null ? (
-                    <span className="text-on-surface-variant text-sm">
-                      ~{selectedTable.row_count_estimate.toLocaleString()} rows
-                    </span>
-                  ) : null}
-                </div>
-                <table className="w-full mt-3 text-sm">
-                  <thead>
-                    <tr className="text-left border-b border-outline/15 text-on-surface-variant uppercase text-xs tracking-wider">
-                      <th className="py-2">Column</th>
-                      <th>Type</th>
-                      <th>Null?</th>
-                      <th>Notes</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedTable.columns.map((c) => (
-                      <tr key={c.name} className="border-b border-outline/10">
-                        <td className="py-2 font-mono">{c.name}</td>
-                        <td className="text-on-surface-variant">{c.data_type}</td>
-                        <td className="text-on-surface-variant">
-                          {c.nullable ? "yes" : "no"}
-                        </td>
-                        <td className="text-on-surface-variant space-x-2">
-                          {c.is_pk ? <span className="text-primary">PK</span> : null}
-                          {c.is_id ? <span className="text-secondary">ID</span> : null}
-                          {c.fk_to ? (
-                            <span className="text-tertiary">→ {c.fk_to}</span>
-                          ) : null}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </GlassPanel>
-
-              <GlassPanel className="px-5 py-4">
-                <div className="text-xs uppercase tracking-wider text-on-surface-variant pb-2">
-                  Samples
-                </div>
-                <div className="space-y-3">
-                  {Object.entries(samples).map(([col, s]) => (
-                    <div key={col} className="text-sm">
-                      <div className="font-mono text-on-surface">{col}</div>
-                      <div className="text-on-surface-variant ml-3">
-                        {s.distinct_values ? (
-                          <>
-                            distinct:{" "}
-                            <span className="font-mono">
-                              {s.distinct_values.map((v) => JSON.stringify(v)).join(", ")}
-                              {s.distinct_truncated ? ", …" : ""}
-                            </span>
-                          </>
-                        ) : s.numeric_stats ? (
-                          <span className="font-mono">
-                            {Object.entries(s.numeric_stats)
-                              .map(([k, v]) => `${k}=${v}`)
-                              .join(", ")}
-                          </span>
-                        ) : s.sample_rows ? (
-                          <span className="font-mono">
-                            sample: {s.sample_rows.map((v) => JSON.stringify(v)).join(", ")}
-                          </span>
-                        ) : (
-                          <span className="opacity-60">no sample</span>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </GlassPanel>
-            </>
-          ) : null}
-        </div>
-      </div>
-    </PageShell>
-  );
-}
-
-function PageShell({ children }: { children: React.ReactNode }) {
-  return (
-    <main className="mx-auto max-w-6xl px-4 py-8 space-y-4">
+    <main className="mx-auto max-w-3xl px-4 py-8 space-y-4">
       <header>
-        <p className="font-mono text-label-caps uppercase text-on-surface-variant">
+        <Link
+          href={`/workspaces/${params.id}`}
+          className="text-on-surface-variant text-sm hover:underline"
+        >
+          ← Connections
+        </Link>
+        <p className="font-mono text-label-caps uppercase text-on-surface-variant mt-2">
           Schema Explorer
         </p>
         <h1 className="font-headline text-headline-lg text-on-surface mt-1">
-          Profiled schema
+          {data?.name ?? "Loading…"}
         </h1>
+        <p className="text-on-surface-variant text-sm mt-1">
+          Pick a database to inspect its profiled schema.
+        </p>
       </header>
-      {children}
+
+      {error ? (
+        <GlassPanel className="px-5 py-4 text-error">{error}</GlassPanel>
+      ) : !data ? (
+        <GlassPanel className="px-5 py-4 text-on-surface-variant">
+          Loading…
+        </GlassPanel>
+      ) : data.connections.length === 0 ? (
+        <GlassPanel className="px-5 py-4 text-on-surface-variant">
+          No connections yet —{" "}
+          <Link
+            href={`/workspaces/${params.id}`}
+            className="text-primary hover:underline"
+          >
+            add one
+          </Link>
+          .
+        </GlassPanel>
+      ) : (
+        <div className="space-y-2">
+          {data.connections.map((c) => (
+            <GlassPanel key={c.connection_id} className="px-5 py-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-headline text-on-surface text-lg">
+                    {c.name}
+                  </div>
+                  <div className="text-on-surface-variant text-sm uppercase tracking-wider">
+                    {c.dialect}
+                    {c.table_count != null
+                      ? ` · ${c.table_count} tables`
+                      : ""}
+                  </div>
+                </div>
+                {c.bundle_ready ? (
+                  <Link
+                    href={`/workspaces/${params.id}/connections/${c.connection_id}/schema`}
+                    className="text-primary hover:underline text-sm"
+                  >
+                    Open schema →
+                  </Link>
+                ) : (
+                  <span className="text-on-surface-variant text-sm uppercase tracking-wider">
+                    {c.status}
+                  </span>
+                )}
+              </div>
+            </GlassPanel>
+          ))}
+        </div>
+      )}
     </main>
   );
 }

@@ -11,13 +11,126 @@ from app.schemas.llm_io import SqlPlan
 
 log = logging.getLogger(__name__)
 
-_SYSTEM = (
+_SQL_SYSTEM = (
     "You are a SQL planner for a strict READ-ONLY analytics tool. "
     "Generate exactly one SELECT (with optional WITH/CTEs) that answers "
-    "the user's question against the provided schema. "
-    "Rules: SELECT only, no DML/DDL, no system tables, no functions like "
-    "pg_sleep or load_file. Reference only columns that exist. "
-    "Prefer concise queries; do not include comments."
+    "the user's question against the provided schema.\n"
+    "\n"
+    "Rules:\n"
+    "  * SELECT only, no DML/DDL, no system tables, no pg_sleep/load_file.\n"
+    "  * Reference ONLY tables and columns that appear in the schema.\n"
+    "  * Do NOT invent column names. If the question can't be answered\n"
+    "    with the given schema, write the closest meaningful SELECT and\n"
+    "    say so in the rationale.\n"
+    "  * Do NOT add time filters the user did not ask for. If the user\n"
+    "    says 'last 30 days', filter by 30 days; if they say nothing\n"
+    "    about time, do NOT inject an arbitrary INTERVAL.\n"
+    "  * Concise queries, no SQL comments.\n"
+    "\n"
+    "Display-name handling — IMPORTANT:\n"
+    "  When the result will surface a person/entity name, fall back\n"
+    "  gracefully if some rows have NULL or empty names. Combine the\n"
+    "  available identifier columns so the UI always has something\n"
+    "  meaningful to show. Examples:\n"
+    "    * users(id, full_name, username) →\n"
+    "        COALESCE(NULLIF(TRIM(u.full_name), ''), u.username,\n"
+    "                 'user #' || u.id::text) AS display_name\n"
+    "    * customers(id, name, email) →\n"
+    "        COALESCE(NULLIF(TRIM(c.name), ''), c.email,\n"
+    "                 'customer #' || c.id::text) AS display_name\n"
+    "  Always alias the combined column with a clear name.\n"
+    "\n"
+    "Top-N defaults — IMPORTANT:\n"
+    "  When the user asks 'who is the X' / 'kim eng X' (singular),\n"
+    "  RETURN THE TOP 5–10 ROWS, not just LIMIT 1. A small leaderboard\n"
+    "  is more useful than a single row, and the UI can highlight #1.\n"
+    "  Only use LIMIT 1 when the user explicitly asks for one record\n"
+    "  ('show me the single most …', 'just the top one').\n"
+    "\n"
+    "Richer columns — IMPORTANT:\n"
+    "  When ranking entities (users / customers / products), include\n"
+    "  the primary metric the user asked for PLUS 1–2 related context\n"
+    "  metrics from the same table if they exist (e.g. when ranking\n"
+    "  quiz users by session count, also SUM correct_answers and\n"
+    "  total_questions, MAX(created_at) AS last_activity). This makes\n"
+    "  the table/chart self-explanatory without follow-up questions.\n"
+    "  Stay within columns that exist in the schema.\n"
+    "\n"
+    "Translating natural-language modifiers (English + Uzbek):\n"
+    "  * 'most active', 'top user', 'eng faol', 'eng ko\\'p ...'\n"
+    "    → AGGREGATE: COUNT/SUM grouped by the relevant id, then\n"
+    "      ORDER BY <agg> DESC LIMIT 10 (or LIMIT 5).\n"
+    "  * 'latest', 'recent', 'oxirgi', 'so\\'nggi'\n"
+    "    → ORDER BY <timestamp> DESC LIMIT N. No GROUP BY needed.\n"
+    "  * 'how many', 'qancha', 'nechta' → COUNT(*) without LIMIT 1.\n"
+    "  * 'average', 'avg', 'o\\'rtacha' → AVG().\n"
+    "  * 'distribution', 'tarqalish', 'ulush' → GROUP BY + share\n"
+    "    (counts can be used for proportions).\n"
+    "\n"
+    "Example — 'Eng faol foydalanuvchi kim?' over\n"
+    "  users(id, full_name, username) and\n"
+    "  quiz_sessions(user_id, created_at, total_questions, correct_answers):\n"
+    "    SELECT\n"
+    "      COALESCE(NULLIF(TRIM(u.full_name), ''), u.username,\n"
+    "               'user #' || u.id::text) AS display_name,\n"
+    "      COUNT(qs.id) AS sessions_count,\n"
+    "      SUM(qs.correct_answers) AS correct_total,\n"
+    "      SUM(qs.total_questions) AS questions_total,\n"
+    "      MAX(qs.created_at) AS last_activity\n"
+    "    FROM users u JOIN quiz_sessions qs ON u.id = qs.user_id\n"
+    "    GROUP BY u.id, u.full_name, u.username\n"
+    "    ORDER BY sessions_count DESC\n"
+    "    LIMIT 10;\n"
+    "  (NOT: ORDER BY qs.created_at DESC LIMIT 1, NOT: only full_name,\n"
+    "  NOT: LIMIT 1 — show a leaderboard.)"
+)
+
+_ES_SYSTEM = (
+    "You are an Elasticsearch query planner for a strict READ-ONLY "
+    "analytics tool. Generate exactly ONE search request that answers "
+    "the user's question against the provided index mapping.\n"
+    "\n"
+    "Output contract — IMPORTANT:\n"
+    "  The `sql` field of your SqlPlan must be a JSON ENVELOPE STRING "
+    "with this shape:\n"
+    '    {"index": "<index pattern>", "body": { ... ES request body ... }}\n'
+    "  The `dialect` field must be exactly \"elasticsearch\".\n"
+    "  Because `sql` is a JSON string field, every double quote inside "
+    "your envelope must be backslash-escaped — your final SqlPlan JSON "
+    "will contain the envelope as a quoted string.\n"
+    "\n"
+    "Rules:\n"
+    "  * SEARCH ONLY. Never include `script`, `script_score`, "
+    "`script_fields`, `scripted_metric`, `runtime_mappings` with "
+    "scripts, `_delete_by_query`, `_update_by_query`, or `_reindex`.\n"
+    "  * Reference ONLY indices and fields from the schema.\n"
+    "  * Do NOT add time filters the user did not ask for.\n"
+    "  * If the user asks for a COUNT or AGGREGATE, set body.size to 0 "
+    "and use body.aggs.\n"
+    "  * If the user wants raw documents, keep body.size <= 50 and use "
+    "body.sort to order them.\n"
+    "  * Use keyword sub-fields for term aggregations on text fields: "
+    "if the mapping shows `name` as text, prefer `name.keyword`.\n"
+    "\n"
+    "Common patterns:\n"
+    "  * 'how many X' → size=0, aggs that bucket / count.\n"
+    "  * 'top N by Y' → aggs.terms on the group field with size=N, a "
+    "metric sub-agg (sum / avg) on Y, ORDER BY the metric DESC by "
+    "setting terms.order = {\"<metric_name>\": \"desc\"}.\n"
+    "  * 'trend over time' → aggs.date_histogram on the @timestamp / "
+    "date field with calendar_interval set to day/week/month.\n"
+    "  * 'filter X by Y' → bool.filter clauses (term / range / match).\n"
+    "\n"
+    "Example — 'top 5 customers by total revenue this month' over "
+    "index `orders` with fields customer.keyword, amount, ordered_at:\n"
+    '    {"index":"orders","body":{"size":0,"query":{"bool":{"filter":'
+    '[{"range":{"ordered_at":{"gte":"now/M"}}}]}},"aggs":{"by_customer":'
+    '{"terms":{"field":"customer.keyword","size":5,"order":{"total":'
+    '"desc"}},"aggs":{"total":{"sum":{"field":"amount"}}}}}}}\n'
+    "\n"
+    "Plan ONE request only. If the schema cannot answer the question, "
+    "write the closest meaningful aggregation and explain in the "
+    "rationale."
 )
 
 _MAX_RAG_CHARS = 1800
@@ -93,6 +206,13 @@ async def run(state: GraphState) -> GraphState:
     # so we drop those to avoid duplication.
     rag_extras = _rag_context(state.get("retrieved_chunks") or [])
 
+    # Dispatch the prompt by connection query language. SQL engines all
+    # share the SqlPlan output shape ``{sql, dialect, rationale, …}``;
+    # Elasticsearch reuses the same shape but the `sql` field holds a
+    # JSON envelope string (see _ES_SYSTEM).
+    is_es = bundle is not None and bundle.dialect == "elasticsearch"
+    system_prompt = _ES_SYSTEM if is_es else _SQL_SYSTEM
+
     prompt_user = (
         f"Question: {state.get('user_message','')}\n\n"
         f"Schema:\n{_schema_brief(bundle, keep)}\n\n"
@@ -105,7 +225,7 @@ async def run(state: GraphState) -> GraphState:
     try:
         plan = await llm.structured(
             [
-                {"role": "system", "content": _SYSTEM},
+                {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt_user},
             ],
             SqlPlan,

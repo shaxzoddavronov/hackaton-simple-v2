@@ -14,6 +14,18 @@ import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+# Make our INFO logs visible in the uvicorn console. uvicorn ships with
+# its own handler on the root logger; we just need to ensure our level
+# isn't suppressed. Format includes the logger name so per-stream trace
+# ids land in a single column.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+# Keep the noisier libraries at WARNING so our traces stay readable.
+for noisy in ("httpx", "httpcore", "asyncio", "sqlalchemy.engine"):
+    logging.getLogger(noisy).setLevel(logging.WARNING)
+
 from app.api import (
     auth,
     chat,

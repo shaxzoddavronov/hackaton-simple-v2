@@ -1,10 +1,20 @@
 from __future__ import annotations
 
+import logging
+from uuid import UUID
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from app.agents.llm import get_llm
 from app.agents.state import GraphState
+from app.config import settings
+from app.db.models import WorkspaceConnection
 from app.schemas.llm_io import IntentDecision
 
-_SYSTEM = (
+log = logging.getLogger(__name__)
+
+_SYSTEM_BASE = (
     "You are the routing brain of QueryMind, an NL-to-SQL assistant. "
     "Classify each user message into EXACTLY ONE intent.\n\n"
     "Definitions:\n"
@@ -15,19 +25,28 @@ _SYSTEM = (
     "aggregate value. Examples: 'what tables do I have?', 'list the columns "
     "of orders', 'which schemas are in this DB?'\n"
     "- data_query: asks for actual ROWS, counts, aggregates, rankings, "
-    "filtered values, time-series, top-N, or a single chart. The answer "
-    "requires running SQL. Examples: 'how many users?', 'top 5 customers "
-    "by revenue', 'who is the most active user', 'orders last week', "
-    "'average order value by region'. If a question can be answered by "
-    "running SELECT against tables, it is data_query — NOT metadata.\n"
+    "filtered values, time-series, top-N, or a single chart against ONE "
+    "database. Examples: 'how many users?', 'top 5 customers by revenue', "
+    "'who is the most active user', 'orders last week'.\n"
     "- dashboard: asks for a multi-panel overview / KPIs side by side / "
-    "'show me a dashboard for X'.\n"
+    "'show me a dashboard for X' (still single DB).\n"
+    "- federated_query: answer needs DATA FROM TWO OR MORE different "
+    "connections in this workspace, joined or merged together. Triggers:\n"
+    "    * the message names two or more connection names from the list "
+    "below (e.g., 'compare orders in <conn-a> with events in <conn-b>'),\n"
+    "    * cross-database language: 'join … with …', 'compare X across', "
+    "'both databases', 'combine X and Y', 'side by side',\n"
+    "    * different data clearly lives in different stores (postgres "
+    "orders + ES logs, mongo events + sql users, etc.).\n"
+    "  If the question can be answered by ONE connection alone, prefer "
+    "data_query over federated_query.\n"
     "- clarify: ambiguous about WHICH workspace OR what the user wants. "
     "Only use this when the question itself can't be acted on.\n\n"
     "Heuristics:\n"
     "  * Words like 'how many', 'count', 'top', 'most', 'least', "
     "'eng', 'qancha', 'nechta', 'kim', 'who is', 'which' followed by an "
-    "entity → almost always data_query.\n"
+    "entity → almost always data_query (or federated_query if multiple "
+    "DBs are referenced).\n"
     "  * Only classify as metadata when the question literally asks about "
     "schema structure, not values.\n\n"
     "Also extract `workspace_hint` if the message names a specific "
@@ -35,15 +54,44 @@ _SYSTEM = (
 )
 
 
+async def _connection_listing(workspace_id: UUID | None) -> str:
+    """Render the user's workspace connections as a hint for the
+    classifier. Without this the LLM can't reliably detect when a
+    question names two specific connections (and thus warrants
+    federated_query)."""
+    if workspace_id is None:
+        return ""
+    sa_engine = create_async_engine(settings.DATABASE_URL, pool_pre_ping=True)
+    Session = async_sessionmaker(sa_engine, expire_on_commit=False)
+    try:
+        async with Session() as session:
+            rows = await session.execute(
+                select(WorkspaceConnection).where(
+                    WorkspaceConnection.workspace_id == workspace_id,
+                    WorkspaceConnection.status == "ready",
+                )
+            )
+            conns = list(rows.scalars().all())
+    finally:
+        await sa_engine.dispose()
+    if not conns:
+        return ""
+    lines = [f"  - {c.name} ({c.dialect})" for c in conns]
+    return "\nConnections available in this workspace:\n" + "\n".join(lines)
+
+
 async def run(state: GraphState) -> GraphState:
     msg = state.get("user_message", "")
     if not msg:
         return {"intent": "clarify", "error_message": "empty user message"}
 
+    listing = await _connection_listing(state.get("resolved_workspace_id"))
+    system_prompt = _SYSTEM_BASE + listing
+
     llm = get_llm()
     decision = await llm.structured(
         [
-            {"role": "system", "content": _SYSTEM},
+            {"role": "system", "content": system_prompt},
             {"role": "user", "content": msg},
         ],
         IntentDecision,

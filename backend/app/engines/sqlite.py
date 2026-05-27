@@ -24,13 +24,14 @@ from app.services.readonly_validator import validate_readonly
 class SqliteEngine:
     dialect: Dialect = "sqlite"
 
-    def __init__(self, workspace) -> None:
-        meta = dict(workspace.connection_meta or {})
-        creds = getattr(workspace, "_credentials", None) or {}
+    def __init__(self, source) -> None:
+        # See PostgresEngine for the ``source`` duck-type contract.
+        meta = dict(source.connection_meta or {})
+        creds = getattr(source, "_credentials", None) or {}
         meta.update(creds)
         self._path = meta.get("path")
         if not self._path:
-            raise ValueError("SQLite workspace.connection_meta must include 'path'")
+            raise ValueError("SQLite connection_meta must include 'path'")
         # Read-only URI form. For :memory: the read-only URI doesn't apply.
         if self._path == ":memory:":
             self._conn_uri = ":memory:"

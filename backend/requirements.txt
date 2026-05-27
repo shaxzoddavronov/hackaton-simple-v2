@@ -34,6 +34,12 @@ sqlglot
 # Optional at unit-test time; required when running against Postgres.
 pgvector
 
+# Elasticsearch async client. Pinned to v8.x because v9.x sends an
+# `Accept: ...; compatible-with=9` header that ES 7 and 8 servers reject
+# with HTTP 400 media-type errors. v8.x is wire-compatible with both 7
+# and 8 server versions.
+elasticsearch[async]>=8.0,<9.0
+
 # HTTP client + OpenAI-compatible vLLM client
 httpx
 openai

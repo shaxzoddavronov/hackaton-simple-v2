@@ -27,14 +27,19 @@ _SYSTEM_SCHEMAS = ("pg_catalog", "information_schema", "pg_toast")
 class PostgresEngine:
     dialect: Dialect = "postgres"
 
-    def __init__(self, workspace) -> None:
-        meta = dict(workspace.connection_meta or {})
-        creds = getattr(workspace, "_credentials", None) or {}
+    def __init__(self, source) -> None:
+        # ``source`` is duck-typed: anything with connection_meta + an
+        # optional ``_credentials`` dict works. In production it's a
+        # WorkspaceConnection ORM row; tests pass SimpleNamespace.
+        meta = dict(source.connection_meta or {})
+        creds = getattr(source, "_credentials", None) or {}
         meta.update(creds)
         required = {"host", "port", "db_name", "user", "password"}
         missing = required - meta.keys()
         if missing:
-            raise ValueError(f"Postgres workspace missing connection keys: {sorted(missing)}")
+            raise ValueError(
+                f"Postgres connection missing keys: {sorted(missing)}"
+            )
         self._dsn_kwargs = {
             "host": meta["host"],
             "port": int(meta["port"]),

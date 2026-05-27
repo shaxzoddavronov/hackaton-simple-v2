@@ -78,7 +78,14 @@ class User(Base):
 
 
 class Workspace(Base):
-    """A connected end-user database (Postgres or SQLite in v1)."""
+    """A folder/grouping for one or more database connections.
+
+    Post-migration 0003, a Workspace no longer carries connection details
+    itself — those live on :class:`WorkspaceConnection`. The legacy
+    ``dialect`` / ``connection_meta`` columns are kept nullable for one
+    release so a rollback can rebuild from them, but **new code must not
+    read them**. They will be dropped in a follow-up migration.
+    """
 
     __tablename__ = "workspaces"
 
@@ -91,10 +98,73 @@ class Workspace(Base):
         nullable=False,
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    # DEPRECATED — see class docstring. Do not read in new code.
+    dialect: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    connection_meta: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONType, nullable=True
+    )
+    # Status here is just an aggregate hint — the canonical per-DB
+    # status lives on each WorkspaceConnection.
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default=text("'pending'")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    owner: Mapped[User] = relationship(back_populates="workspaces")
+    connections: Mapped[list["WorkspaceConnection"]] = relationship(
+        back_populates="workspace",
+        cascade="all, delete-orphan",
+    )
+    chat_sessions: Mapped[list["ChatSession"]] = relationship(
+        back_populates="workspace", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        # Keep the legacy CHECK as None-tolerant so the nullable column
+        # doesn't trip it. The new dialects live on WorkspaceConnection.
+        CheckConstraint(
+            "dialect IS NULL OR dialect IN ('postgres','sqlite','mysql',"
+            "'clickhouse','oracle','mongodb','elasticsearch')",
+            name="ck_workspaces_dialect",
+        ),
+        CheckConstraint(
+            "status IN ('pending','profiling','ready','error','auth_error')",
+            name="ck_workspaces_status",
+        ),
+        Index("ix_workspaces_owner_id", "owner_id"),
+    )
+
+
+class WorkspaceConnection(Base):
+    """A single database connection inside a workspace.
+
+    One workspace contains N of these. Each connection has its own
+    dialect, connection metadata, encrypted credentials, profiling
+    status, and schema bundle. The agent's executor is dispatched at
+    the connection level — there's no cross-connection JOIN in this
+    phase (that's the federation layer, coming later).
+    """
+
+    __tablename__ = "workspace_connections"
+
+    id: Mapped[UUID] = mapped_column(
+        UUIDType, primary_key=True, server_default=_UUID_DEFAULT
+    )
+    workspace_id: Mapped[UUID] = mapped_column(
+        UUIDType,
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
     dialect: Mapped[str] = mapped_column(String(32), nullable=False)
-    # Free-form, dialect-specific connection bits the agent layer does NOT
-    # interpret — the engine adapter does. Stored as JSONB (e.g. host/port/db
-    # for Postgres, file path for SQLite, ssl options, etc.).
     connection_meta: Mapped[dict[str, Any]] = mapped_column(
         JSONType, nullable=False, server_default=text("'{}'::jsonb")
     )
@@ -111,49 +181,50 @@ class Workspace(Base):
         onupdate=func.now(),
     )
 
-    owner: Mapped[User] = relationship(back_populates="workspaces")
+    workspace: Mapped[Workspace] = relationship(back_populates="connections")
     credentials: Mapped["WorkspaceCredentials | None"] = relationship(
-        back_populates="workspace",
+        back_populates="connection",
         uselist=False,
         cascade="all, delete-orphan",
     )
     schema_bundle: Mapped["SchemaBundle | None"] = relationship(
-        back_populates="workspace",
+        back_populates="connection",
         uselist=False,
         cascade="all, delete-orphan",
     )
-    chat_sessions: Mapped[list["ChatSession"]] = relationship(
-        back_populates="workspace", cascade="all, delete-orphan"
-    )
     profile_jobs: Mapped[list["ProfileJob"]] = relationship(
-        back_populates="workspace", cascade="all, delete-orphan"
+        back_populates="connection", cascade="all, delete-orphan"
     )
 
     __table_args__ = (
         CheckConstraint(
-            "dialect IN ('postgres','sqlite')",
-            name="ck_workspaces_dialect",
+            "dialect IN ('postgres','sqlite','mysql','clickhouse',"
+            "'oracle','mongodb','elasticsearch')",
+            name="ck_workspace_connections_dialect",
         ),
         CheckConstraint(
             "status IN ('pending','profiling','ready','error','auth_error')",
-            name="ck_workspaces_status",
+            name="ck_workspace_connections_status",
         ),
-        Index("ix_workspaces_owner_id", "owner_id"),
+        UniqueConstraint(
+            "workspace_id", "name", name="uq_workspace_connections_workspace_name"
+        ),
+        Index("ix_workspace_connections_workspace_id", "workspace_id"),
     )
 
 
 class WorkspaceCredentials(Base):
-    """AES-GCM-encrypted credentials for a workspace. PK == FK.
+    """AES-GCM-encrypted credentials for one WorkspaceConnection. PK == FK.
 
-    Storing one row per workspace (PK == FK) keeps the relationship 1:1
+    Storing one row per connection (PK == FK) keeps the relationship 1:1
     at the schema level. `key_version` lets us rotate the master key.
     """
 
     __tablename__ = "workspace_credentials"
 
-    workspace_id: Mapped[UUID] = mapped_column(
+    connection_id: Mapped[UUID] = mapped_column(
         UUIDType,
-        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        ForeignKey("workspace_connections.id", ondelete="CASCADE"),
         primary_key=True,
     )
     auth_kind: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -166,7 +237,7 @@ class WorkspaceCredentials(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
-    workspace: Mapped[Workspace] = relationship(back_populates="credentials")
+    connection: Mapped[WorkspaceConnection] = relationship(back_populates="credentials")
 
     __table_args__ = (
         CheckConstraint(
@@ -177,18 +248,18 @@ class WorkspaceCredentials(Base):
 
 
 class SchemaBundle(Base):
-    """Deterministically-profiled snapshot of a workspace's schema.
+    """Deterministically-profiled snapshot of one connection's schema.
 
-    One row per workspace (PK == FK). The `bundle` JSON is the contract
-    consumed by `agents/nodes/schema_loader` and friends; its structure
-    is owned by `app/schemas/schema_bundle.py`.
+    One row per WorkspaceConnection (PK == FK). The `bundle` JSON is the
+    contract consumed by `agents/nodes/schema_loader` and friends; its
+    structure is owned by `app/schemas/schema_bundle.py`.
     """
 
     __tablename__ = "schema_bundles"
 
-    workspace_id: Mapped[UUID] = mapped_column(
+    connection_id: Mapped[UUID] = mapped_column(
         UUIDType,
-        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        ForeignKey("workspace_connections.id", ondelete="CASCADE"),
         primary_key=True,
     )
     bundle: Mapped[dict[str, Any]] = mapped_column(JSONType, nullable=False)
@@ -200,7 +271,7 @@ class SchemaBundle(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
-    workspace: Mapped[Workspace] = relationship(back_populates="schema_bundle")
+    connection: Mapped[WorkspaceConnection] = relationship(back_populates="schema_bundle")
 
     __table_args__ = (
         CheckConstraint(
@@ -212,7 +283,13 @@ class SchemaBundle(Base):
 
 
 class ChatSession(Base):
-    """One conversation thread inside a workspace."""
+    """One conversation thread inside a workspace.
+
+    A session lives at the workspace level (so chat history is per
+    workspace, not per connection) but **remembers the last connection
+    used** in ``connection_id``. The chat UI surfaces a connection
+    picker; the agent reads ``connection_id`` to pick the right engine.
+    """
 
     __tablename__ = "chat_sessions"
 
@@ -223,6 +300,14 @@ class ChatSession(Base):
         UUIDType,
         ForeignKey("workspaces.id", ondelete="CASCADE"),
         nullable=False,
+    )
+    # Set to whichever connection the most recent turn ran against —
+    # nullable because a session may exist before any turn has fired
+    # (e.g., greeting / chitchat).
+    connection_id: Mapped[UUID | None] = mapped_column(
+        UUIDType,
+        ForeignKey("workspace_connections.id", ondelete="SET NULL"),
+        nullable=True,
     )
     user_id: Mapped[UUID] = mapped_column(
         UUIDType,
@@ -313,8 +398,10 @@ class QueryHistory(Base):
     message: Mapped[Message] = relationship(back_populates="query_history")
 
     __table_args__ = (
+        # Mirrors workspace_connections.dialect — see migration 0004.
         CheckConstraint(
-            "dialect IN ('postgres','sqlite')",
+            "dialect IN ('postgres','sqlite','mysql','clickhouse',"
+            "'oracle','mongodb','elasticsearch')",
             name="ck_query_history_dialect",
         ),
         CheckConstraint(
@@ -326,16 +413,16 @@ class QueryHistory(Base):
 
 
 class ProfileJob(Base):
-    """Tracks a background schema-profiling run for a workspace."""
+    """Tracks a background schema-profiling run for one connection."""
 
     __tablename__ = "profile_jobs"
 
     id: Mapped[UUID] = mapped_column(
         UUIDType, primary_key=True, server_default=_UUID_DEFAULT
     )
-    workspace_id: Mapped[UUID] = mapped_column(
+    connection_id: Mapped[UUID] = mapped_column(
         UUIDType,
-        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        ForeignKey("workspace_connections.id", ondelete="CASCADE"),
         nullable=False,
     )
     state: Mapped[str] = mapped_column(
@@ -352,14 +439,14 @@ class ProfileJob(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
-    workspace: Mapped[Workspace] = relationship(back_populates="profile_jobs")
+    connection: Mapped[WorkspaceConnection] = relationship(back_populates="profile_jobs")
 
     __table_args__ = (
         CheckConstraint(
             "state IN ('queued','running','succeeded','failed','cancelled')",
             name="ck_profile_jobs_state",
         ),
-        Index("ix_profile_jobs_workspace_id", "workspace_id"),
+        Index("ix_profile_jobs_connection_id", "connection_id"),
         Index("ix_profile_jobs_state", "state"),
     )
 
@@ -448,10 +535,16 @@ class RagChunk(Base):
         UUIDType, primary_key=True, server_default=_UUID_DEFAULT
     )
     # workspace_id is nullable so global chunks (e.g., our REST API catalog)
-    # can live in the same index. Workspace-scoped retrieval still filters.
+    # can live in the same index. Workspace-scoped retrieval still filters
+    # on it; connection_id narrows further when a specific DB is in play.
     workspace_id: Mapped[UUID | None] = mapped_column(
         UUIDType,
         ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    connection_id: Mapped[UUID | None] = mapped_column(
+        UUIDType,
+        ForeignKey("workspace_connections.id", ondelete="CASCADE"),
         nullable=True,
     )
     document_id: Mapped[UUID | None] = mapped_column(
@@ -497,6 +590,7 @@ class RagChunk(Base):
 __all__ = [
     "User",
     "Workspace",
+    "WorkspaceConnection",
     "WorkspaceCredentials",
     "SchemaBundle",
     "ChatSession",

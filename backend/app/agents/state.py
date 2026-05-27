@@ -18,16 +18,32 @@ class GraphState(TypedDict, total=False):
     user_id: UUID
     session_id: UUID
     user_message: str
-    active_workspace_id: UUID | None  # dropdown selection
+    active_workspace_id: UUID | None  # workspace dropdown selection
+    active_connection_id: UUID | None  # connection dropdown selection
 
     # Coordinator outputs
     resolved_workspace_id: UUID | None
+    resolved_connection_id: UUID | None  # which DB to actually query
     intent: str  # chitchat | metadata | data_query | dashboard | clarify
     workspace_hint: str | None
 
     # Schema loader / pruner
     schema_bundle: SchemaBundle | None
     pruned_table_qnames: list[str]
+
+    # Federated path: multi-schema loader fills this dict on
+    # ``intent == "federated_query"``. Keys are connection UUID strings;
+    # values are the per-connection :class:`SchemaBundle`. The
+    # federated_planner reads it; the single-connection paths ignore it.
+    connection_bundles: dict[str, SchemaBundle]
+
+    # Federated planner output (subset of FederatedPlan as dicts so
+    # LangGraph's TypedDict semantics stay simple).
+    federated_plan: dict[str, Any] | None
+
+    # Per-sub-query results keyed by alias. The federated_executor
+    # populates this and then runs the merge pipeline.
+    sub_results: dict[str, Any]
 
     # RAG retrieval (semantic top-K via Triton + pgvector). When empty,
     # the planner falls back to the BM25 pruned list above. Each item is

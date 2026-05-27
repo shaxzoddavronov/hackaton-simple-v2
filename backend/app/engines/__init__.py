@@ -21,6 +21,7 @@ def register_all() -> None:
     """
     from app.engines import postgres as _postgres  # noqa: F401
     from app.engines import sqlite as _sqlite  # noqa: F401
+    from app.engines import elasticsearch as _es  # noqa: F401
 
 
 __all__ = ["DIALECT_REGISTRY", "get_engine", "register_all"]

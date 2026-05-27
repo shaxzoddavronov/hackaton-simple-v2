@@ -10,8 +10,8 @@ import { api, getToken } from "@/lib/api";
 type WorkspaceOut = {
   id: string;
   name: string;
-  dialect: string;
   status: string;
+  connection_count: number;
 };
 
 const STATUS_TINT: Record<string, string> = {
@@ -52,7 +52,7 @@ export default function WorkspacesPage() {
           href="/workspaces/new"
           className="rounded-xl bg-primary-container text-on-primary-container px-4 py-2 font-semibold hover:opacity-90"
         >
-          + Connect database
+          + New workspace
         </Link>
       </div>
 
@@ -86,8 +86,9 @@ export default function WorkspacesPage() {
                   <div className="font-headline text-on-surface text-lg">
                     {w.name}
                   </div>
-                  <div className="text-on-surface-variant text-sm uppercase tracking-wider">
-                    {w.dialect}
+                  <div className="text-on-surface-variant text-sm">
+                    {w.connection_count}{" "}
+                    {w.connection_count === 1 ? "connection" : "connections"}
                   </div>
                 </div>
                 <span
@@ -101,10 +102,10 @@ export default function WorkspacesPage() {
               </div>
               <div className="flex gap-3 pt-2 text-sm">
                 <Link
-                  href={`/workspaces/${w.id}/schema`}
+                  href={`/workspaces/${w.id}`}
                   className="text-primary hover:underline"
                 >
-                  Schema
+                  Connections
                 </Link>
                 <Link
                   href={`/chat?workspace=${w.id}`}

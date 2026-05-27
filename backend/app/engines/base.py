@@ -4,7 +4,21 @@ from typing import Any, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
-Dialect = Literal["postgres", "sqlite"]
+# SQL-style dialects (sqlglot-validated, JDBC-shaped).
+SqlDialect = Literal["postgres", "sqlite", "mysql", "clickhouse", "oracle"]
+# Non-SQL dialects (Mongo aggregation pipelines, ES Query DSL). Their
+# engines will be plugged in via the same registry but speak different
+# query languages — readonly_validator does not apply to them.
+NoSqlDialect = Literal["mongodb", "elasticsearch"]
+Dialect = Literal[
+    "postgres",
+    "sqlite",
+    "mysql",
+    "clickhouse",
+    "oracle",
+    "mongodb",
+    "elasticsearch",
+]
 
 
 class ColumnMeta(BaseModel):

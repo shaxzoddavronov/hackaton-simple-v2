@@ -7,7 +7,10 @@ from app.agents.nodes import (
     chart_designer,
     coordinator,
     error_responder,
+    federated_executor,
+    federated_planner,
     finalizer,
+    multi_schema_loader,
     query_executor,
     query_planner,
     query_validator,
@@ -30,6 +33,8 @@ def _route_after_coordinator(state: GraphState) -> str:
         return "schema_loader"
     if intent in {"data_query", "dashboard"}:
         return "schema_loader"
+    if intent == "federated_query":
+        return "multi_schema_loader"
     return "finalizer"
 
 
@@ -42,6 +47,34 @@ def _route_after_schema(state: GraphState) -> str:
     # data_query / dashboard → go through RAG before planning so the planner
     # gets semantically pruned tables + retrieved API/doc context.
     return "rag_retriever"
+
+
+def _route_after_multi_schema(state: GraphState) -> str:
+    """Federation entry. If multi_schema_loader couldn't gather any
+    bundles, abort early via error_responder."""
+    if state.get("error_message"):
+        return "error_responder"
+    return "federated_planner"
+
+
+def _route_after_federated_planner(state: GraphState) -> str:
+    """Federated path mirrors the single-DB validate/execute retry
+    loop, but compresses validate+execute into one node. If the
+    planner couldn't produce a plan (parse/validation issues) we retry
+    up to MAX_PLANNER_ATTEMPTS, then escalate."""
+    if state.get("federated_plan"):
+        return "federated_executor"
+    if int(state.get("planner_attempts", 0)) >= MAX_PLANNER_ATTEMPTS:
+        return "error_responder"
+    return "federated_planner"
+
+
+def _route_after_federated_executor(state: GraphState):
+    if state.get("result") is not None:
+        return ["chart_designer", "answer_writer"]
+    if int(state.get("executor_attempts", 0)) >= MAX_EXECUTOR_ATTEMPTS:
+        return "error_responder"
+    return "federated_planner"
 
 
 def _route_after_validation(state: GraphState) -> str:
@@ -71,6 +104,9 @@ def build_graph():
     g.add_node("query_planner", query_planner.run)
     g.add_node("query_validator", query_validator.run)
     g.add_node("query_executor", query_executor.run)
+    g.add_node("multi_schema_loader", multi_schema_loader.run)
+    g.add_node("federated_planner", federated_planner.run)
+    g.add_node("federated_executor", federated_executor.run)
     g.add_node("chart_designer", chart_designer.run)
     g.add_node("answer_writer", answer_writer.run)
     g.add_node("finalizer", finalizer.run)
@@ -84,6 +120,7 @@ def build_graph():
         {
             "answer_writer": "answer_writer",
             "schema_loader": "schema_loader",
+            "multi_schema_loader": "multi_schema_loader",
             "finalizer": "finalizer",
         },
     )
@@ -118,6 +155,36 @@ def build_graph():
             "chart_designer": "chart_designer",
             "answer_writer": "answer_writer",
             "query_planner": "query_planner",
+            "error_responder": "error_responder",
+        },
+    )
+
+    # Federated path: coordinator → multi_schema_loader → federated_planner
+    # → federated_executor → {chart, answer} → finalizer.
+    g.add_conditional_edges(
+        "multi_schema_loader",
+        _route_after_multi_schema,
+        {
+            "federated_planner": "federated_planner",
+            "error_responder": "error_responder",
+        },
+    )
+    g.add_conditional_edges(
+        "federated_planner",
+        _route_after_federated_planner,
+        {
+            "federated_executor": "federated_executor",
+            "federated_planner": "federated_planner",
+            "error_responder": "error_responder",
+        },
+    )
+    g.add_conditional_edges(
+        "federated_executor",
+        _route_after_federated_executor,
+        {
+            "chart_designer": "chart_designer",
+            "answer_writer": "answer_writer",
+            "federated_planner": "federated_planner",
             "error_responder": "error_responder",
         },
     )

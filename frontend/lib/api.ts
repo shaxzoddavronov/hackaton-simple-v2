@@ -81,8 +81,17 @@ export type TestConnectionResult = {
   error_kind?: "auth" | "network" | "timeout" | "config" | "other" | null;
 };
 
+export type Dialect =
+  | "postgres"
+  | "sqlite"
+  | "mysql"
+  | "clickhouse"
+  | "oracle"
+  | "mongodb"
+  | "elasticsearch";
+
 export async function testConnection(payload: {
-  dialect: "postgres" | "sqlite";
+  dialect: Dialect;
   connection_meta: Record<string, unknown>;
   credentials: Record<string, string>;
   auth_kind: "password" | "dsn" | "iam" | "none";
@@ -91,6 +100,105 @@ export async function testConnection(payload: {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+// ── Connections under a workspace ──
+
+export type ConnectionSummary = {
+  id: string;
+  workspace_id: string;
+  name: string;
+  dialect: Dialect;
+  status: string;
+  profile_job_id?: string | null;
+};
+
+export async function listConnections(
+  workspace_id: string,
+): Promise<ConnectionSummary[]> {
+  return api<ConnectionSummary[]>(`/workspaces/${workspace_id}/connections`);
+}
+
+export async function createConnection(
+  workspace_id: string,
+  payload: {
+    name: string;
+    dialect: Dialect;
+    connection_meta: Record<string, unknown>;
+    credentials: Record<string, string>;
+    auth_kind: "password" | "dsn" | "iam" | "none";
+  },
+): Promise<ConnectionSummary> {
+  return api<ConnectionSummary>(`/workspaces/${workspace_id}/connections`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteConnection(
+  workspace_id: string,
+  connection_id: string,
+): Promise<void> {
+  const r = await fetch(
+    `${API_BASE}/workspaces/${workspace_id}/connections/${connection_id}`,
+    { method: "DELETE", headers: authHeader() },
+  );
+  if (!r.ok && r.status !== 204) {
+    throw new Error(`Delete failed: ${r.status}`);
+  }
+}
+
+export async function refreshConnection(
+  workspace_id: string,
+  connection_id: string,
+): Promise<ConnectionSummary> {
+  return api<ConnectionSummary>(
+    `/workspaces/${workspace_id}/connections/${connection_id}/refresh`,
+    { method: "POST" },
+  );
+}
+
+export type ChatSessionSummary = {
+  id: string;
+  workspace_id: string;
+  title: string;
+  created_at: string;
+  last_message_at: string;
+};
+
+export type StoredMessage = {
+  id: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  ui_spec: unknown;
+  created_at: string;
+};
+
+export type ChatSessionDetail = {
+  session_id: string;
+  workspace_id: string | null;
+  messages: StoredMessage[];
+};
+
+export async function listSessions(
+  workspace_id?: string,
+): Promise<ChatSessionSummary[]> {
+  const qs = workspace_id ? `?workspace_id=${encodeURIComponent(workspace_id)}` : "";
+  return api<ChatSessionSummary[]>(`/chat/sessions${qs}`);
+}
+
+export async function loadSession(id: string): Promise<ChatSessionDetail> {
+  return api<ChatSessionDetail>(`/chat/sessions/${id}`);
+}
+
+export async function deleteSession(id: string): Promise<void> {
+  const r = await fetch(`${API_BASE}/chat/sessions/${id}`, {
+    method: "DELETE",
+    headers: authHeader(),
+  });
+  if (!r.ok && r.status !== 204) {
+    throw new Error(`Delete failed: ${r.status}`);
+  }
 }
 
 export type SseEvent = { event: string; data: unknown };
@@ -104,6 +212,7 @@ export async function streamChat(
     message: string;
     session_id?: string | null;
     active_workspace_id?: string | null;
+    active_connection_id?: string | null;
   },
   onEvent: (evt: SseEvent) => void,
 ): Promise<void> {

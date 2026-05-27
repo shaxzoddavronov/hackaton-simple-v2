@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.agents.state import GraphState
+from app.services.es_readonly_validator import validate_es_query
 from app.services.readonly_validator import validate_readonly
 
 
@@ -9,7 +10,13 @@ async def run(state: GraphState) -> GraphState:
     if plan is None:
         return {"last_validation_error": "no plan to validate"}
 
-    result = validate_readonly(plan.sql, dialect=plan.dialect)
+    # Dispatch by dialect. SQL engines all use the sqlglot AST walker;
+    # Elasticsearch uses the JSON-DSL validator (rejects scripts /
+    # mutation endpoints / system indices).
+    if plan.dialect == "elasticsearch":
+        result, _envelope = validate_es_query(plan.sql)
+    else:
+        result = validate_readonly(plan.sql, dialect=plan.dialect)
     out: GraphState = {"validation": result}
     if not result.ok:
         codes = ", ".join(f.code for f in result.findings) or "unknown"

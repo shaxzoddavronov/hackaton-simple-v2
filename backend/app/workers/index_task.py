@@ -19,8 +19,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.config import settings
 from app.services.rag.indexer import (
     reindex_api_catalog,
+    reindex_connection,
     reindex_document,
-    reindex_workspace,
 )
 from app.services.rag.triton_client import TritonUnavailable
 from app.workers.celery_app import celery_app
@@ -29,17 +29,18 @@ log = logging.getLogger(__name__)
 
 
 @celery_app.task(
-    name="app.workers.index_task.run_index_workspace",
+    name="app.workers.index_task.run_index_connection",
     bind=True,
     autoretry_for=(TritonUnavailable,),
     retry_backoff=True,
     retry_backoff_max=600,
     retry_kwargs={"max_retries": 5},
 )
-def run_index_workspace(self, workspace_id: str) -> dict[str, int]:
-    """Full reindex for one workspace. Called from ``profile_task`` on
-    success and from the daily diff job when drift is detected."""
-    return asyncio.run(_index_workspace_async(UUID(workspace_id)))
+def run_index_connection(self, connection_id: str) -> dict[str, int]:
+    """Full reindex for one connection's schema chunks. Called from
+    ``profile_task`` on success and from the daily diff job when drift
+    is detected."""
+    return asyncio.run(_index_connection_async(UUID(connection_id)))
 
 
 @celery_app.task(
@@ -69,15 +70,15 @@ def run_index_document(self, document_id: str) -> dict[str, int]:
     return asyncio.run(_index_document_async(UUID(document_id)))
 
 
-async def _index_workspace_async(workspace_id: UUID) -> dict[str, int]:
+async def _index_connection_async(connection_id: UUID) -> dict[str, int]:
     engine = create_async_engine(settings.DATABASE_URL, pool_pre_ping=True)
     Session = async_sessionmaker(engine, expire_on_commit=False)
     try:
         async with Session() as session:
-            report = await reindex_workspace(session, workspace_id)
+            report = await reindex_connection(session, connection_id)
         log.info(
-            "rag.reindex_workspace ws=%s upserted=%d skipped=%d removed=%d",
-            workspace_id,
+            "rag.reindex_connection conn=%s upserted=%d skipped=%d removed=%d",
+            connection_id,
             report["upserted"],
             report["skipped"],
             report["removed"],
@@ -121,7 +122,7 @@ async def _index_document_async(document_id: UUID) -> dict[str, int]:
 
 
 __all__ = [
-    "run_index_workspace",
+    "run_index_connection",
     "run_index_api_catalog",
     "run_index_document",
 ]

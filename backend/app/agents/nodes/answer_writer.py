@@ -16,12 +16,20 @@ _SYSTEM = (
 # happily invents tables like ``user_activities`` that don't exist.
 _META_SYSTEM = (
     "You answer questions about a connected database. You will be shown "
-    "the database schema. When the user asks about tables, columns, or "
-    "what data is available, ONLY reference tables and columns that "
-    "appear in the schema below. Never invent table or column names. "
-    "If the user asks for something the schema cannot answer, say so "
-    "plainly and suggest the closest available alternative. Keep "
-    "responses short (2-4 sentences)."
+    "the database schema. ONLY reference tables and columns that appear "
+    "in the schema. Never invent names. If the schema cannot answer the "
+    "question, say so and suggest the closest alternative.\n"
+    "\n"
+    "Length rules — STRICT:\n"
+    "  * headline: ONE short sentence (max 12 words).\n"
+    "  * body_md: 2-4 short sentences. NO bullet lists. NO tables. "
+    "NO long enumerations of every column. If you must list things, "
+    "name at most 5 items inline and write 'and others' if there are "
+    "more. Total body_md MUST stay under 600 characters.\n"
+    "  * key_numbers: omit unless a concrete number from the schema "
+    "answers the question directly.\n"
+    "Total response (headline + body_md) must comfortably fit in a "
+    "chat bubble — do not exceed 800 characters combined."
 )
 
 
@@ -85,12 +93,17 @@ async def run(state: GraphState) -> GraphState:
                 "tool called QueryMind. Keep it short and helpful."
             )
 
+        # AnswerDraft for metadata can run long when the model lists
+        # tables/columns verbosely. 2048 leaves headroom over the
+        # ~800-char target so we don't truncate mid-string and trip
+        # the salvage layer.
         draft = await llm.structured(
             [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
             AnswerDraft,
+            max_tokens=2048,
         )
         return {"answer": draft}
 
@@ -109,5 +122,6 @@ async def run(state: GraphState) -> GraphState:
             {"role": "user", "content": prompt},
         ],
         AnswerDraft,
+        max_tokens=2048,
     )
     return {"answer": draft}

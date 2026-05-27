@@ -34,6 +34,10 @@ class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
     session_id: UUID | None = None
     active_workspace_id: UUID | None = None
+    # Picked from the per-workspace connection dropdown. Required for
+    # data_query / dashboard turns; for chitchat / metadata the agent
+    # can still respond without a specific DB.
+    active_connection_id: UUID | None = None
 
 
 def _sse(event: str, data: dict[str, Any]) -> bytes:
@@ -111,6 +115,10 @@ async def post_chat(
     chat_session = await _ensure_session(
         session, current_user, payload.session_id, workspace_id
     )
+    # Remember the connection picked for this turn so reopening the
+    # session restores the right DB selector.
+    if payload.active_connection_id is not None:
+        chat_session.connection_id = payload.active_connection_id
 
     user_msg = Message(
         session_id=chat_session.id,
@@ -122,13 +130,22 @@ async def post_chat(
     await session.refresh(chat_session)
 
     async def event_stream() -> AsyncIterator[bytes]:
+        # Per-stream trace id so every log line for this request is
+        # filterable in the uvicorn console — when a chunk-encoding
+        # crash happens, this is the first thing to look up.
+        trace = uuid4().hex[:8]
+        log.info("[%s] chat.stream START session=%s workspace=%s connection=%s",
+                 trace, chat_session.id, workspace_id, payload.active_connection_id)
+
         graph = get_graph()
         graph_input = {
             "user_id": current_user.id,
             "session_id": chat_session.id,
             "user_message": payload.message,
             "active_workspace_id": payload.active_workspace_id,
+            "active_connection_id": payload.active_connection_id,
             "resolved_workspace_id": workspace_id,
+            "resolved_connection_id": payload.active_connection_id,
         }
 
         yield _sse(
@@ -136,6 +153,11 @@ async def post_chat(
             {
                 "session_id": str(chat_session.id),
                 "workspace_id": str(workspace_id) if workspace_id else None,
+                "connection_id": (
+                    str(payload.active_connection_id)
+                    if payload.active_connection_id
+                    else None
+                ),
             },
         )
 
@@ -144,17 +166,25 @@ async def post_chat(
             async for event in graph.astream(graph_input):
                 # `event` is {node_name: state_delta}
                 for node_name, delta in event.items():
+                    log.info("[%s] node=%s", trace, node_name)
                     yield _sse("node", {"node": node_name})
                     if isinstance(delta, dict):
                         for k, v in delta.items():
                             final_state[k] = v
         except Exception as exc:
-            log.exception("graph invocation failed")
+            log.exception("[%s] graph invocation failed", trace)
             yield _sse("error", {"message": str(exc)})
             return
 
         ui_spec = final_state.get("ui_spec")
         sql_executed = final_state.get("sql_executed")
+        log.info(
+            "[%s] graph done. ui_spec_type=%s sql_executed_len=%s has_plan=%s",
+            trace,
+            getattr(ui_spec, "type", None),
+            len(sql_executed) if sql_executed else 0,
+            final_state.get("plan") is not None,
+        )
 
         # Persist the assistant turn + audit row.
         assistant_msg = Message(
@@ -163,30 +193,48 @@ async def post_chat(
             content=_extract_body(ui_spec),
             ui_spec=ui_spec.model_dump(mode="json") if ui_spec is not None else None,
         )
+        log.info("[%s] persist: session.add(assistant_msg)", trace)
         session.add(assistant_msg)
+        log.info("[%s] persist: session.flush()", trace)
         await session.flush()
         if sql_executed:
             rs = final_state.get("result")
+            plan = final_state.get("plan")
+            audit_dialect = plan.dialect if plan is not None else "postgres"
+            log.info(
+                "[%s] persist: QueryHistory(dialect=%s, status=%s)",
+                trace,
+                audit_dialect,
+                "ok" if rs is not None else "executor_error",
+            )
             session.add(
                 QueryHistory(
                     message_id=assistant_msg.id,
                     sql_text=sql_executed,
-                    dialect=final_state.get("plan").dialect if final_state.get("plan") else "postgres",
+                    dialect=audit_dialect,
                     took_ms=rs.took_ms if rs is not None else None,
                     row_count=rs.row_count if rs is not None else None,
                     status="ok" if rs is not None else "executor_error",
                 )
             )
+        log.info("[%s] persist: session.commit()", trace)
         await session.commit()
+        log.info("[%s] persist OK assistant_msg=%s", trace, assistant_msg.id)
 
+        # Federation transparency: include the per-sub-query breakdown so
+        # the UI can show "Queried: pg-quiz · 12 rows, es-search · 30 rows"
+        # above the chart. Empty / missing on single-DB turns.
+        sub_results = final_state.get("sub_results") or {}
         yield _sse(
             "final",
             {
                 "ui_spec": ui_spec.model_dump(mode="json") if ui_spec is not None else None,
                 "sql": sql_executed,
                 "assistant_message_id": str(assistant_msg.id),
+                "sub_results": sub_results,
             },
         )
+        log.info("[%s] chat.stream END", trace)
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
@@ -201,6 +249,64 @@ def _extract_body(ui_spec) -> str:
             if getattr(ch.spec, "type", None) == "text_only":
                 return getattr(ch.spec, "body_md", "")
     return getattr(ui_spec, "title", "") or ""
+
+
+@router.get("/sessions")
+async def list_sessions(
+    workspace_id: UUID | None = None,
+    limit: int = 50,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[dict[str, Any]]:
+    """List the calling user's past chat sessions.
+
+    Filterable by ``workspace_id`` so the chat sidebar can show only the
+    history for the workspace currently selected. Title comes from the
+    first user message (truncated to 60 chars) — we don't store an
+    explicit title yet.
+    """
+    stmt = select(ChatSession).where(ChatSession.user_id == current_user.id)
+    if workspace_id is not None:
+        stmt = stmt.where(ChatSession.workspace_id == workspace_id)
+    stmt = stmt.order_by(ChatSession.created_at.desc()).limit(min(limit, 200))
+    rows = await session.execute(stmt)
+    sessions = list(rows.scalars().all())
+
+    # Fetch the first user message per session in one query so we can
+    # synthesize a preview/title without N+1 round-trips.
+    out: list[dict[str, Any]] = []
+    for cs in sessions:
+        first = await session.execute(
+            select(Message)
+            .where(Message.session_id == cs.id, Message.role == "user")
+            .order_by(Message.created_at)
+            .limit(1)
+        )
+        first_msg = first.scalar_one_or_none()
+        last = await session.execute(
+            select(Message)
+            .where(Message.session_id == cs.id)
+            .order_by(Message.created_at.desc())
+            .limit(1)
+        )
+        last_msg = last.scalar_one_or_none()
+        title = cs.title or (
+            (first_msg.content[:60] + ("…" if len(first_msg.content) > 60 else ""))
+            if first_msg
+            else "(empty)"
+        )
+        out.append(
+            {
+                "id": str(cs.id),
+                "workspace_id": str(cs.workspace_id),
+                "title": title,
+                "created_at": cs.created_at.isoformat(),
+                "last_message_at": (
+                    last_msg.created_at.isoformat() if last_msg else cs.created_at.isoformat()
+                ),
+            }
+        )
+    return out
 
 
 @router.get("/sessions/{session_id}")
@@ -230,3 +336,17 @@ async def get_session(
             for m in msgs
         ],
     }
+
+
+@router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_session(
+    session_id: UUID,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    cs = await session.get(ChatSession, session_id)
+    if cs is None or cs.user_id != current_user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Session not found")
+    await session.delete(cs)
+    await session.commit()
+    # messages + query_history cascade via FK ON DELETE CASCADE.

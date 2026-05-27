@@ -15,11 +15,19 @@ def register(dialect: Dialect):
     return deco
 
 
-def get_engine(workspace) -> QueryEngine:
-    dialect: Dialect = workspace.dialect
+def get_engine(source) -> QueryEngine:
+    """Construct a QueryEngine for ``source``.
+
+    ``source`` is duck-typed: any object with ``dialect`` and
+    ``connection_meta`` attributes works, plus an optional ``_credentials``
+    dict (decrypted credentials, attached by callers). Both
+    :class:`WorkspaceConnection` ORM rows and ad-hoc ``SimpleNamespace``
+    objects (used by ``test_connection`` and tests) satisfy the shape.
+    """
+    dialect: Dialect = source.dialect
     if dialect not in DIALECT_REGISTRY:
         raise ValueError(
             f"No engine registered for dialect {dialect!r}. "
             f"Known: {sorted(DIALECT_REGISTRY)}"
         )
-    return DIALECT_REGISTRY[dialect](workspace)
+    return DIALECT_REGISTRY[dialect](source)

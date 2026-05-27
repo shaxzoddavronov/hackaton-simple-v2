@@ -1,23 +1,35 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { GlassPanel } from "@/components/GlassPanel";
 import { MessageBubble } from "@/components/MessageBubble";
-import { api, getToken, streamChat } from "@/lib/api";
+import {
+  api,
+  deleteSession,
+  getToken,
+  listConnections,
+  listSessions,
+  loadSession,
+  streamChat,
+  type ChatSessionSummary,
+  type ConnectionSummary,
+} from "@/lib/api";
 import type { ChatMessage, UISpec } from "@/lib/types";
 
 type WorkspaceOut = {
   id: string;
   name: string;
-  dialect: string;
   status: string;
+  connection_count: number;
 };
 
 const ACTIVE_WS_KEY = "qm_active_workspace";
+const ACTIVE_CONN_KEY = "qm_active_connection";
 
 export default function ChatPage() {
+  const router = useRouter();
   const search = useSearchParams();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -29,11 +41,17 @@ export default function ChatPage() {
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(
     null,
   );
+  const [connections, setConnections] = useState<ConnectionSummary[] | null>(
+    null,
+  );
+  const [activeConnectionId, setActiveConnectionId] = useState<string | null>(
+    null,
+  );
+  const [history, setHistory] = useState<ChatSessionSummary[] | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
-  // Decide which workspace to pre-select. Priority: ?workspace=<id> in the
-  // URL (when navigating from the workspaces page) > the last one used in
-  // this browser (localStorage) > the first 'ready' workspace from the API.
+  // ── Init: pick active workspace from ?workspace= or localStorage ──
   useEffect(() => {
     if (!getToken()) {
       setAuthMissing(true);
@@ -62,16 +80,124 @@ export default function ChatPage() {
       .catch(() => setWorkspaces([]));
   }, [search]);
 
+  // ── If ?session= is in the URL, eagerly load that thread ──
+  // We wait until we know the workspace so the session list reflects it.
+  useEffect(() => {
+    if (!activeWorkspaceId) return;
+    const sid = search.get("session");
+    if (!sid || sid === sessionId) return;
+    void openSession(sid);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeWorkspaceId, search]);
+
+  // ── Load connections whenever workspace changes ──
+  useEffect(() => {
+    if (!activeWorkspaceId) {
+      setConnections(null);
+      setActiveConnectionId(null);
+      return;
+    }
+    listConnections(activeWorkspaceId)
+      .then((items) => {
+        setConnections(items);
+        const fromUrl = search.get("connection");
+        const fromStorage =
+          typeof window !== "undefined"
+            ? window.localStorage.getItem(ACTIVE_CONN_KEY)
+            : null;
+        const ready = items.find((c) => c.status === "ready");
+        const candidate =
+          (fromUrl && items.find((c) => c.id === fromUrl)?.id) ||
+          (fromStorage && items.find((c) => c.id === fromStorage)?.id) ||
+          ready?.id ||
+          items[0]?.id ||
+          null;
+        setActiveConnectionId(candidate);
+        if (candidate && typeof window !== "undefined") {
+          window.localStorage.setItem(ACTIVE_CONN_KEY, candidate);
+        }
+      })
+      .catch(() => setConnections([]));
+  }, [activeWorkspaceId, search]);
+
+  // ── Refresh the sidebar whenever workspace changes or after a turn ──
+  const refreshHistory = useCallback(async () => {
+    if (!activeWorkspaceId) {
+      setHistory([]);
+      return;
+    }
+    try {
+      const items = await listSessions(activeWorkspaceId);
+      setHistory(items);
+      setHistoryError(null);
+    } catch (err) {
+      setHistoryError(err instanceof Error ? err.message : "Load failed");
+    }
+  }, [activeWorkspaceId]);
+
+  useEffect(() => {
+    void refreshHistory();
+  }, [refreshHistory]);
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, activeNode]);
 
   function pickWorkspace(id: string) {
     setActiveWorkspaceId(id);
-    setSessionId(null); // start a fresh session when switching workspaces
+    setSessionId(null);
     setMessages([]);
     if (typeof window !== "undefined") {
       window.localStorage.setItem(ACTIVE_WS_KEY, id);
+    }
+    // Drop the ?session= part from the URL when switching workspaces.
+    router.replace(`/chat?workspace=${id}`);
+  }
+
+  async function openSession(id: string) {
+    try {
+      const detail = await loadSession(id);
+      // The session may live under a different workspace if the user
+      // followed a deep link — sync the active workspace to match.
+      if (detail.workspace_id && detail.workspace_id !== activeWorkspaceId) {
+        setActiveWorkspaceId(detail.workspace_id);
+        window.localStorage.setItem(ACTIVE_WS_KEY, detail.workspace_id);
+      }
+      setSessionId(detail.session_id);
+      setMessages(
+        detail.messages.map((m) => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          ui_spec: (m.ui_spec ?? null) as UISpec | null,
+        })),
+      );
+      router.replace(
+        `/chat?workspace=${detail.workspace_id ?? activeWorkspaceId ?? ""}&session=${detail.session_id}`,
+      );
+    } catch (err) {
+      setHistoryError(err instanceof Error ? err.message : "Load failed");
+    }
+  }
+
+  function newSession() {
+    setSessionId(null);
+    setMessages([]);
+    if (activeWorkspaceId) {
+      router.replace(`/chat?workspace=${activeWorkspaceId}`);
+    }
+  }
+
+  async function removeSession(id: string) {
+    if (!window.confirm("Sessiyani o'chirib yuborilsinmi?")) return;
+    try {
+      await deleteSession(id);
+      if (id === sessionId) {
+        newSession();
+      }
+      await refreshHistory();
+    } catch (err) {
+      setHistoryError(err instanceof Error ? err.message : "Delete failed");
     }
   }
 
@@ -119,6 +245,7 @@ export default function ChatPage() {
     let finalSpec: UISpec | null = null;
     let finalSql: string | null = null;
     let assistantId = crypto.randomUUID();
+    let newlyCreatedSessionId: string | null = null;
 
     try {
       await streamChat(
@@ -126,11 +253,15 @@ export default function ChatPage() {
           message: userText,
           session_id: sessionId,
           active_workspace_id: activeWorkspaceId,
+          active_connection_id: activeConnectionId,
         },
         (evt) => {
           if (evt.event === "session" && evt.data && typeof evt.data === "object") {
             const d = evt.data as { session_id?: string };
-            if (d.session_id) setSessionId(d.session_id);
+            if (d.session_id) {
+              if (!sessionId) newlyCreatedSessionId = d.session_id;
+              setSessionId(d.session_id);
+            }
           } else if (evt.event === "node" && evt.data && typeof evt.data === "object") {
             const d = evt.data as { node?: string };
             if (d.node) setActiveNode(d.node);
@@ -170,6 +301,14 @@ export default function ChatPage() {
           sql: finalSql,
         },
       ]);
+      // After the first message of a brand-new session, sync the URL
+      // so refresh / back-button keeps the thread open.
+      if (newlyCreatedSessionId && activeWorkspaceId) {
+        router.replace(
+          `/chat?workspace=${activeWorkspaceId}&session=${newlyCreatedSessionId}`,
+        );
+      }
+      void refreshHistory();
     }
   }
 
@@ -177,90 +316,211 @@ export default function ChatPage() {
     workspaces?.find((w) => w.id === activeWorkspaceId) ?? null;
 
   return (
-    <main className="mx-auto max-w-3xl px-4 py-8 flex flex-col h-screen">
-      <header className="mb-4 space-y-3">
-        <div className="flex items-end justify-between gap-4">
-          <div>
-            <h1 className="font-headline text-2xl text-on-surface">
-              Neural Chat
-            </h1>
-            <p className="text-on-surface-variant text-sm">
-              Ask anything about your connected databases.
-            </p>
-          </div>
-          {workspaces && workspaces.length > 0 ? (
-            <label className="flex flex-col text-xs text-on-surface-variant gap-1">
-              <span className="uppercase tracking-wider">Workspace</span>
-              <select
-                value={activeWorkspaceId ?? ""}
-                onChange={(e) => pickWorkspace(e.target.value)}
-                className="rounded-lg bg-surface-container-high/60 px-3 py-2 text-on-surface border border-outline/20 focus:outline-none focus:border-primary"
-              >
-                {workspaces.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.name} ({w.dialect}
-                    {w.status !== "ready" ? ` · ${w.status}` : ""})
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
+    <main className="mx-auto max-w-6xl px-4 py-8 h-screen flex gap-4">
+      {/* ── Sidebar: chat history ── */}
+      <aside className="w-72 shrink-0 flex flex-col">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-headline text-on-surface text-lg">Chats</h2>
+          <button
+            type="button"
+            onClick={newSession}
+            className="text-xs rounded-lg bg-primary-container/40 text-primary px-2 py-1 hover:opacity-90"
+          >
+            + New
+          </button>
         </div>
-        {activeWs && activeWs.status !== "ready" ? (
-          <GlassPanel className="px-4 py-2 text-on-surface-variant text-sm">
-            Workspace status: <b>{activeWs.status}</b> — profiling tugashini
-            kuting yoki <a href="/" className="text-primary underline">workspaces</a> ga qayting.
-          </GlassPanel>
-        ) : null}
-        {workspaces && workspaces.length === 0 ? (
-          <GlassPanel className="px-4 py-3 text-on-surface-variant text-sm">
-            Hech bir workspace yo'q. Avval{" "}
-            <a className="text-primary underline" href="/workspaces/new">
-              Connect database
-            </a>{" "}
-            orqali bittasini yarating.
-          </GlassPanel>
-        ) : null}
-      </header>
+        <GlassPanel className="flex-1 overflow-y-auto px-2 py-2 space-y-1">
+          {historyError ? (
+            <div className="text-error text-xs px-2 py-2">{historyError}</div>
+          ) : history === null ? (
+            <div className="text-on-surface-variant text-xs px-2 py-2">
+              Loading…
+            </div>
+          ) : history.length === 0 ? (
+            <div className="text-on-surface-variant text-xs px-2 py-2">
+              Hozircha hech qanday chat yo&apos;q.
+            </div>
+          ) : (
+            history.map((s) => {
+              const selected = s.id === sessionId;
+              return (
+                <div
+                  key={s.id}
+                  className={
+                    "group flex items-center gap-1 rounded-lg px-2 py-2 " +
+                    (selected
+                      ? "bg-primary-container/30"
+                      : "hover:bg-surface-container-high/40")
+                  }
+                >
+                  <button
+                    type="button"
+                    onClick={() => void openSession(s.id)}
+                    className="flex-1 text-left"
+                  >
+                    <div className="text-on-surface text-sm truncate">
+                      {s.title}
+                    </div>
+                    <div className="text-on-surface-variant text-xs">
+                      {new Date(s.last_message_at).toLocaleString("uz-UZ", {
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void removeSession(s.id);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 text-on-surface-variant hover:text-error px-1 text-xs"
+                    title="Delete"
+                  >
+                    ✕
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </GlassPanel>
+      </aside>
 
-      <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-        {messages.map((m) => (
-          <MessageBubble key={m.id} message={m} />
-        ))}
-        {streaming ? (
-          <div className="text-on-surface-variant text-sm italic">
-            {activeNode ? `running ${activeNode}…` : "thinking…"}
+      {/* ── Main chat column ── */}
+      <section className="flex-1 flex flex-col min-w-0">
+        <header className="mb-4 space-y-3">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <h1 className="font-headline text-2xl text-on-surface">
+                Neural Chat
+              </h1>
+              <p className="text-on-surface-variant text-sm">
+                Ask anything about your connected databases.
+              </p>
+            </div>
+            {workspaces && workspaces.length > 0 ? (
+              <div className="flex items-end gap-3">
+                <label className="flex flex-col text-xs text-on-surface-variant gap-1">
+                  <span className="uppercase tracking-wider">Workspace</span>
+                  <select
+                    value={activeWorkspaceId ?? ""}
+                    onChange={(e) => pickWorkspace(e.target.value)}
+                    className="rounded-lg bg-surface-container-high/60 px-3 py-2 text-on-surface border border-outline/20 focus:outline-none focus:border-primary"
+                  >
+                    {workspaces.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.name}
+                        {w.status !== "ready" ? ` · ${w.status}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {connections && connections.length > 0 ? (
+                  <label className="flex flex-col text-xs text-on-surface-variant gap-1">
+                    <span className="uppercase tracking-wider">Database</span>
+                    <select
+                      value={activeConnectionId ?? ""}
+                      onChange={(e) => {
+                        setActiveConnectionId(e.target.value);
+                        window.localStorage.setItem(
+                          ACTIVE_CONN_KEY,
+                          e.target.value,
+                        );
+                      }}
+                      className="rounded-lg bg-surface-container-high/60 px-3 py-2 text-on-surface border border-outline/20 focus:outline-none focus:border-primary"
+                    >
+                      {connections.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} ({c.dialect}
+                          {c.status !== "ready" ? ` · ${c.status}` : ""})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+              </div>
+            ) : null}
           </div>
-        ) : null}
-        <div ref={endRef} />
-      </div>
+          {activeWs && activeWs.status !== "ready" ? (
+            <GlassPanel className="px-4 py-2 text-on-surface-variant text-sm">
+              Workspace status: <b>{activeWs.status}</b> — profiling tugashini
+              kuting yoki{" "}
+              <a href="/" className="text-primary underline">
+                workspaces
+              </a>{" "}
+              ga qayting.
+            </GlassPanel>
+          ) : null}
+          {workspaces && workspaces.length === 0 ? (
+            <GlassPanel className="px-4 py-3 text-on-surface-variant text-sm">
+              Hech bir workspace yo&apos;q. Avval{" "}
+              <a className="text-primary underline" href="/workspaces/new">
+                New workspace
+              </a>{" "}
+              orqali yarating, keyin uning ichida database connection
+              qo&apos;shing.
+            </GlassPanel>
+          ) : null}
+          {activeWs && connections && connections.length === 0 ? (
+            <GlassPanel className="px-4 py-3 text-on-surface-variant text-sm">
+              Bu workspace ichida hali database yo&apos;q.{" "}
+              <a
+                className="text-primary underline"
+                href={`/workspaces/${activeWs.id}`}
+              >
+                Connection qo&apos;shing
+              </a>
+              .
+            </GlassPanel>
+          ) : null}
+        </header>
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          send();
-        }}
-        className="mt-4 flex gap-2"
-      >
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder={
-            activeWs
-              ? `Ask about ${activeWs.name}…`
-              : "Ask a question…"
-          }
-          className="flex-1 rounded-xl bg-surface-container-high/60 px-4 py-2 text-on-surface border border-outline/20 focus:outline-none focus:border-primary"
-          disabled={streaming || !activeWorkspaceId}
-        />
-        <button
-          type="submit"
-          disabled={streaming || !input.trim() || !activeWorkspaceId}
-          className="rounded-xl bg-primary-container text-on-primary-container px-4 py-2 font-semibold disabled:opacity-50"
+        <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+          {messages.map((m) => (
+            <MessageBubble key={m.id} message={m} />
+          ))}
+          {streaming ? (
+            <div className="text-on-surface-variant text-sm italic">
+              {activeNode ? `running ${activeNode}…` : "thinking…"}
+            </div>
+          ) : null}
+          <div ref={endRef} />
+        </div>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            send();
+          }}
+          className="mt-4 flex gap-2"
         >
-          Send
-        </button>
-      </form>
+          <input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder={
+              activeConnectionId
+                ? `Ask about ${
+                    connections?.find((c) => c.id === activeConnectionId)
+                      ?.name ?? "the connected DB"
+                  }…`
+                : "Ask a question…"
+            }
+            className="flex-1 rounded-xl bg-surface-container-high/60 px-4 py-2 text-on-surface border border-outline/20 focus:outline-none focus:border-primary"
+            disabled={streaming || !activeConnectionId}
+          />
+          <button
+            type="submit"
+            disabled={
+              streaming || !input.trim() || !activeConnectionId
+            }
+            className="rounded-xl bg-primary-container text-on-primary-container px-4 py-2 font-semibold disabled:opacity-50"
+          >
+            Send
+          </button>
+        </form>
+      </section>
     </main>
   );
 }

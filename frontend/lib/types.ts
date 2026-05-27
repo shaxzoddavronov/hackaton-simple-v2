@@ -67,10 +67,41 @@ export type UISpec =
   | TableSpec
   | Dashboard;
 
+export type SubResultSummary = {
+  columns: string[];
+  row_count: number;
+};
+
 export type ChatMessage = {
   id: string;
   role: "user" | "assistant" | "system";
   content: string;
   ui_spec?: UISpec | null;
   sql?: string | null;
+  // Federated turns: per-sub-query breakdown keyed by the planner's
+  // alias for that sub-result (e.g., "orders_pg", "events_es").
+  sub_results?: Record<string, SubResultSummary> | null;
+};
+
+export type WorkspaceOut = {
+  id: string;
+  name: string;
+  status: string;
+  connection_count: number;
+};
+
+export type ConnectionOut = {
+  id: string;
+  workspace_id: string;
+  name: string;
+  dialect:
+    | "postgres"
+    | "sqlite"
+    | "mysql"
+    | "clickhouse"
+    | "oracle"
+    | "mongodb"
+    | "elasticsearch";
+  status: string;
+  profile_job_id?: string | null;
 };

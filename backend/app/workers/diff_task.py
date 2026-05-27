@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.config import settings
 from app.db.models import (
     SchemaBundle as SchemaBundleRow,
-    Workspace,
+    WorkspaceConnection,
     WorkspaceCredentials,
 )
 from app.engines import register_all as register_engines
@@ -43,7 +43,7 @@ from app.services import crypto
 from app.services.rag.differ import schema_changed
 from app.services.schema_profiler import profile
 from app.workers.celery_app import celery_app
-from app.workers.index_task import run_index_workspace
+from app.workers.index_task import run_index_connection
 
 register_engines()
 log = logging.getLogger(__name__)
@@ -64,21 +64,19 @@ async def _run_daily_diff_async() -> dict[str, int]:
     try:
         async with Session() as session:
             rows = await session.execute(
-                select(Workspace).where(Workspace.status == "ready")
+                select(WorkspaceConnection).where(WorkspaceConnection.status == "ready")
             )
-            workspaces = list(rows.scalars().all())
+            connections = list(rows.scalars().all())
 
-        for ws in workspaces:
+        for conn in connections:
             try:
-                did_change = await _diff_one_workspace(Session, ws.id)
+                did_change = await _diff_one_connection(Session, conn.id)
                 checked += 1
                 if did_change:
                     changed += 1
-                    # Enqueue RAG reindex; it'll run on whichever worker
-                    # picks it up.
-                    run_index_workspace.delay(str(ws.id))
+                    run_index_connection.delay(str(conn.id))
             except Exception:
-                log.exception("daily diff failed for workspace %s", ws.id)
+                log.exception("daily diff failed for connection %s", conn.id)
                 failed += 1
     finally:
         await engine_sa.dispose()
@@ -89,17 +87,15 @@ async def _run_daily_diff_async() -> dict[str, int]:
     return {"checked": checked, "changed": changed, "failed": failed}
 
 
-async def _diff_one_workspace(Session, workspace_id: UUID) -> bool:
+async def _diff_one_connection(Session, connection_id: UUID) -> bool:
     async with Session() as session:
-        ws = await session.get(Workspace, workspace_id)
-        if ws is None:
+        conn = await session.get(WorkspaceConnection, connection_id)
+        if conn is None:
             return False
-        creds = await _load_credentials(session, workspace_id)
-        ws._credentials = creds  # type: ignore[attr-defined]
-        qe = get_engine(ws)
+        creds = await _load_credentials(session, connection_id)
+        conn._credentials = creds  # type: ignore[attr-defined]
+        qe = get_engine(conn)
         try:
-            # We do introspect only (no full profiling) for the diff check;
-            # samples don't affect the structural fingerprint.
             new_bundle = await qe.introspect_schema()
         finally:
             await qe.aclose()
@@ -107,7 +103,7 @@ async def _diff_one_workspace(Session, workspace_id: UUID) -> bool:
         old_row = (
             await session.execute(
                 select(SchemaBundleRow).where(
-                    SchemaBundleRow.workspace_id == workspace_id
+                    SchemaBundleRow.connection_id == connection_id
                 )
             )
         ).scalar_one_or_none()
@@ -118,43 +114,46 @@ async def _diff_one_workspace(Session, workspace_id: UUID) -> bool:
             return False
 
         log.info(
-            "schema drift ws=%s added=%s removed=%s modified=%s",
-            workspace_id,
+            "schema drift conn=%s added=%s removed=%s modified=%s",
+            connection_id,
             diff.added_tables,
             diff.removed_tables,
             diff.modified_tables,
         )
 
-        # Re-sample so the bundle is complete, then persist.
-        full_bundle = await _resample(ws, new_bundle)
-        await _persist_bundle(session, workspace_id, full_bundle)
+        full_bundle = await _resample(conn)
+        await _persist_bundle(session, connection_id, full_bundle)
         return True
 
 
-async def _resample(ws: Workspace, introspected: SchemaBundle) -> SchemaBundle:
-    """Re-run the profiler so the persisted bundle has fresh samples too."""
-    qe = get_engine(ws)
+async def _resample(conn: WorkspaceConnection) -> SchemaBundle:
+    qe = get_engine(conn)
     try:
         return await profile(qe)
     finally:
         await qe.aclose()
 
 
-async def _load_credentials(session, workspace_id: UUID) -> dict[str, str]:
+async def _load_credentials(session, connection_id: UUID) -> dict[str, str]:
     row = (
         await session.execute(
             select(WorkspaceCredentials).where(
-                WorkspaceCredentials.workspace_id == workspace_id
+                WorkspaceCredentials.connection_id == connection_id
             )
         )
     ).scalar_one_or_none()
     if row is None:
         return {}
-    raw = crypto.decrypt(
+    # See profile_task._load_credentials for the dual-AAD rationale.
+    conn = await session.get(WorkspaceConnection, connection_id)
+    aads: list[bytes | None] = [str(connection_id).encode()]
+    if conn is not None:
+        aads.append(str(conn.workspace_id).encode())
+    raw = crypto.decrypt_with_aads(
         row.ciphertext,
         row.nonce,
         key_version=row.key_version,
-        aad=str(workspace_id).encode(),
+        aads=aads,
     )
     try:
         data = json.loads(raw.decode("utf-8"))
@@ -165,20 +164,22 @@ async def _load_credentials(session, workspace_id: UUID) -> dict[str, str]:
     return {"password": raw.decode("utf-8", errors="replace")}
 
 
-async def _persist_bundle(session, workspace_id: UUID, bundle: SchemaBundle) -> None:
+async def _persist_bundle(
+    session, connection_id: UUID, bundle: SchemaBundle
+) -> None:
     payload = bundle.model_dump(mode="json")
     blob = json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
     digest = hashlib.sha256(blob).hexdigest()
     row = (
         await session.execute(
             select(SchemaBundleRow).where(
-                SchemaBundleRow.workspace_id == workspace_id
+                SchemaBundleRow.connection_id == connection_id
             )
         )
     ).scalar_one_or_none()
     if row is None:
         row = SchemaBundleRow(
-            workspace_id=workspace_id,
+            connection_id=connection_id,
             bundle=payload,
             schema_hash=digest,
             status="ready",

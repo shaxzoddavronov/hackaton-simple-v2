@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.agents.state import GraphState
 from app.config import settings
-from app.db.models import Workspace, WorkspaceCredentials
+from app.db.models import WorkspaceConnection, WorkspaceCredentials
 from app.engines import register_all as register_engines
 from app.engines.registry import get_engine
 from app.services import crypto
@@ -20,9 +20,9 @@ async def run(state: GraphState) -> GraphState:
     attempts = int(state.get("executor_attempts", 0)) + 1
     plan = state.get("plan")
     validation = state.get("validation")
-    workspace_id = state.get("resolved_workspace_id")
+    connection_id = state.get("resolved_connection_id")
 
-    if plan is None or validation is None or not validation.ok or workspace_id is None:
+    if plan is None or validation is None or not validation.ok or connection_id is None:
         return {"last_executor_error": "executor invoked without a valid plan"}
 
     register_engines()
@@ -32,28 +32,34 @@ async def run(state: GraphState) -> GraphState:
     Session = async_sessionmaker(sa_engine, expire_on_commit=False)
     try:
         async with Session() as session:
-            ws = await session.get(Workspace, workspace_id)
+            conn = await session.get(WorkspaceConnection, connection_id)
             creds_row = (
                 await session.execute(
                     select(WorkspaceCredentials).where(
-                        WorkspaceCredentials.workspace_id == workspace_id
+                        WorkspaceCredentials.connection_id == connection_id
                     )
                 )
             ).scalar_one_or_none()
 
-            if ws is None:
+            if conn is None:
                 return {
                     "executor_attempts": attempts,
-                    "last_executor_error": f"workspace {workspace_id} not found",
+                    "last_executor_error": f"connection {connection_id} not found",
                 }
 
             creds: dict[str, str] = {}
             if creds_row is not None:
-                raw = crypto.decrypt(
+                # Dual-AAD compatibility — see crypto.decrypt_with_aads
+                # docstring for why both connection_id and workspace_id
+                # are tried.
+                aads: list[bytes | None] = [str(connection_id).encode()]
+                if conn is not None:
+                    aads.append(str(conn.workspace_id).encode())
+                raw = crypto.decrypt_with_aads(
                     creds_row.ciphertext,
                     creds_row.nonce,
                     key_version=creds_row.key_version,
-                    aad=str(workspace_id).encode(),
+                    aads=aads,
                 )
                 try:
                     parsed = json.loads(raw.decode("utf-8"))
@@ -62,8 +68,8 @@ async def run(state: GraphState) -> GraphState:
                 except Exception:
                     creds = {"password": raw.decode("utf-8", errors="replace")}
 
-            ws._credentials = creds  # type: ignore[attr-defined]
-            engine = get_engine(ws)
+            conn._credentials = creds  # type: ignore[attr-defined]
+            engine = get_engine(conn)
     finally:
         await sa_engine.dispose()
 

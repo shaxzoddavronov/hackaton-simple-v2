@@ -27,7 +27,12 @@ from sqlalchemy import bindparam, delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.db.models import RagChunk, SchemaBundle as SchemaBundleRow, UploadedDocument
+from app.db.models import (
+    RagChunk,
+    SchemaBundle as SchemaBundleRow,
+    UploadedDocument,
+    WorkspaceConnection,
+)
 from app.engines.base import (
     ColumnMeta,
     ForeignKeyMeta,
@@ -49,23 +54,33 @@ from app.services.rag.triton_client import (
 log = logging.getLogger(__name__)
 
 
-async def reindex_workspace(
+async def reindex_connection(
     session: AsyncSession,
-    workspace_id: UUID,
+    connection_id: UUID,
 ) -> dict[str, int]:
-    """Full reindex of one workspace's schema chunks.
+    """Full reindex of one connection's schema chunks.
 
-    Returns a small report: ``{"upserted": N, "skipped": M, "removed": K}``.
+    Chunks are tagged with the parent workspace_id (for workspace-level
+    retrieval) and connection_id (for per-DB retrieval). Returns a small
+    report: ``{"upserted": N, "skipped": M, "removed": K}``.
     """
-    bundle = await _load_bundle(session, workspace_id)
+    conn = await session.get(WorkspaceConnection, connection_id)
+    if conn is None:
+        log.warning("reindex_connection: connection %s not found", connection_id)
+        return {"upserted": 0, "skipped": 0, "removed": 0}
+
+    bundle = await _load_bundle(session, connection_id)
     if bundle is None:
-        log.warning("reindex_workspace: workspace %s has no schema bundle", workspace_id)
+        log.warning(
+            "reindex_connection: connection %s has no schema bundle", connection_id
+        )
         return {"upserted": 0, "skipped": 0, "removed": 0}
 
     chunks = chunk_schema_bundle(bundle)
     report = await _upsert_chunks(
         session,
-        workspace_id=workspace_id,
+        workspace_id=conn.workspace_id,
+        connection_id=connection_id,
         document_id=None,
         chunks=chunks,
         prune_kinds=("schema_table", "schema_column"),
@@ -108,10 +123,10 @@ async def reindex_document(
 
 
 async def _load_bundle(
-    session: AsyncSession, workspace_id: UUID
+    session: AsyncSession, connection_id: UUID
 ) -> SchemaBundleDto | None:
     row = await session.execute(
-        select(SchemaBundleRow).where(SchemaBundleRow.workspace_id == workspace_id)
+        select(SchemaBundleRow).where(SchemaBundleRow.connection_id == connection_id)
     )
     bundle_row = row.scalar_one_or_none()
     if bundle_row is None:
@@ -144,6 +159,7 @@ async def _upsert_chunks(
     session: AsyncSession,
     *,
     workspace_id: UUID | None,
+    connection_id: UUID | None = None,
     document_id: UUID | None,
     chunks: Sequence[Chunk],
     prune_kinds: tuple[str, ...],
@@ -154,8 +170,13 @@ async def _upsert_chunks(
     daily refreshes where nothing changed.
     """
     # Load existing hashes so we can short-circuit unchanged chunks.
+    # Connection-scoped reindex narrows by connection_id so two
+    # connections in the same workspace don't clobber each other.
     existing = await _load_existing(
-        session, workspace_id=workspace_id, kinds=prune_kinds
+        session,
+        workspace_id=workspace_id,
+        connection_id=connection_id,
+        kinds=prune_kinds,
     )
     incoming_keys = {(c.kind, c.source_key) for c in chunks}
 
@@ -177,6 +198,7 @@ async def _upsert_chunks(
         if prev is None:
             row = RagChunk(
                 workspace_id=workspace_id,
+                connection_id=connection_id,
                 document_id=document_id,
                 kind=c.kind,
                 source_key=c.source_key,
@@ -209,6 +231,7 @@ async def _upsert_chunks(
     removed = await _delete_orphans(
         session,
         workspace_id=workspace_id,
+        connection_id=connection_id,
         kinds=prune_kinds,
         keep_keys=incoming_keys,
     )
@@ -251,12 +274,16 @@ async def _load_existing(
     session: AsyncSession,
     *,
     workspace_id: UUID | None,
+    connection_id: UUID | None = None,
     kinds: tuple[str, ...],
 ) -> dict[tuple[str, str], dict[str, Any]]:
     stmt = select(
         RagChunk.id, RagChunk.kind, RagChunk.source_key, RagChunk.content_hash
     ).where(RagChunk.kind.in_(kinds))
-    if workspace_id is None:
+    if connection_id is not None:
+        # Connection-scoped reindex: tightest filter.
+        stmt = stmt.where(RagChunk.connection_id == connection_id)
+    elif workspace_id is None:
         stmt = stmt.where(RagChunk.workspace_id.is_(None))
     else:
         stmt = stmt.where(RagChunk.workspace_id == workspace_id)
@@ -271,13 +298,16 @@ async def _delete_orphans(
     session: AsyncSession,
     *,
     workspace_id: UUID | None,
+    connection_id: UUID | None = None,
     kinds: tuple[str, ...],
     keep_keys: set[tuple[str, str]],
 ) -> int:
     stmt = select(RagChunk.id, RagChunk.kind, RagChunk.source_key).where(
         RagChunk.kind.in_(kinds)
     )
-    if workspace_id is None:
+    if connection_id is not None:
+        stmt = stmt.where(RagChunk.connection_id == connection_id)
+    elif workspace_id is None:
         stmt = stmt.where(RagChunk.workspace_id.is_(None))
     else:
         stmt = stmt.where(RagChunk.workspace_id == workspace_id)
@@ -332,7 +362,7 @@ def _jsonify(session: AsyncSession, m: dict[str, Any]) -> Any:
 
 
 __all__ = [
-    "reindex_workspace",
+    "reindex_connection",
     "reindex_api_catalog",
     "reindex_document",
 ]

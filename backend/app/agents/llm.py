@@ -29,12 +29,15 @@ def _extract_first_json_object(text: str) -> str:
         guided decoding isn't actually enforced by the server).
       - Markdown ``` ```json fences around the payload.
       - A short prose preamble followed by a ``{ … }`` object.
+      - **Truncated JSON** that ran out of ``max_tokens`` mid-string
+        or mid-object. We close any open string with a ``"`` and any
+        open object/array with ``}``/``]`` so the result at least
+        parses. The user gets a partial answer rather than a crash.
 
-    The function walks the string once, tracking brace depth and string
-    state, and returns the substring spanning the first balanced
-    top-level ``{…}``. If no balanced object is found, returns the
-    trimmed input unchanged so ``pydantic`` can fail with its native
-    error.
+    The function walks the string once tracking brace depth and string
+    state. If it finds a balanced top-level ``{…}`` it returns that
+    substring. Otherwise it appends the minimal closers needed to
+    balance and returns the patched payload.
     """
     text = text.strip()
     if not text:
@@ -49,10 +52,21 @@ def _extract_first_json_object(text: str) -> str:
             text = text[:end]
         text = text.strip()
 
+    # Drop everything before the first '{' so a chatty preamble can't
+    # confuse the closer count below.
+    first_brace = text.find("{")
+    if first_brace < 0:
+        return text
+    if first_brace > 0:
+        text = text[first_brace:]
+
     depth = 0
-    start = -1
+    bracket_depth = 0
     in_str = False
     escape = False
+    # Stack of openers in order so we can close them in reverse.
+    opener_stack: list[str] = []
+
     for i, ch in enumerate(text):
         if escape:
             escape = False
@@ -66,16 +80,38 @@ def _extract_first_json_object(text: str) -> str:
         if ch == '"':
             in_str = True
         elif ch == "{":
-            if start < 0:
-                start = i
             depth += 1
+            opener_stack.append("}")
         elif ch == "}":
             depth -= 1
-            if depth == 0 and start >= 0:
-                return text[start : i + 1]
-    # Unbalanced — surface the original trimmed text so the caller's
-    # error message points at the real payload.
-    return text
+            if opener_stack and opener_stack[-1] == "}":
+                opener_stack.pop()
+            if depth == 0 and bracket_depth == 0:
+                # Found a balanced top-level object — clip and return.
+                return text[: i + 1]
+        elif ch == "[":
+            bracket_depth += 1
+            opener_stack.append("]")
+        elif ch == "]":
+            bracket_depth -= 1
+            if opener_stack and opener_stack[-1] == "]":
+                opener_stack.pop()
+
+    # Unbalanced — patch it. Close any open string, then close every
+    # outstanding bracket/brace in LIFO order. Strip a trailing comma
+    # before closing if present (common with truncated arrays).
+    patched = text
+    if in_str:
+        patched += '"'
+    # If the LAST non-whitespace char before truncation is ',' or ':'
+    # it'll make the JSON invalid — backfill with `null` for `:` and
+    # drop the `,`.
+    patched = re.sub(r",\s*$", "", patched)
+    if re.search(r":\s*$", patched):
+        patched += " null"
+    for closer in reversed(opener_stack):
+        patched += closer
+    return patched
 
 
 class LLMClient:
