@@ -23,6 +23,7 @@ def register_all() -> None:
     from app.engines import sqlite as _sqlite  # noqa: F401
     from app.engines import mysql as _mysql  # noqa: F401
     from app.engines import elasticsearch as _es  # noqa: F401
+    from app.engines import clickhouse as _ch  # noqa: F401
 
 
 __all__ = ["DIALECT_REGISTRY", "get_engine", "register_all"]
