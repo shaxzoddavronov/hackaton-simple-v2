@@ -563,7 +563,8 @@ class RagChunk(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "kind IN ('schema_table','schema_column','api_endpoint','user_doc')",
+            "kind IN ('schema_table','schema_column','api_endpoint',"
+            "'user_doc','harvested_doc')",
             name="ck_rag_chunks_kind",
         ),
         UniqueConstraint(
@@ -573,6 +574,74 @@ class RagChunk(Base):
         Index("ix_rag_chunks_workspace_id", "workspace_id"),
         Index("ix_rag_chunks_kind", "kind"),
         Index("ix_rag_chunks_document_id", "document_id"),
+    )
+
+
+class DocSource(Base):
+    """Registered crawl source for documents harvested into the RAG index.
+
+    Three source kinds (one DocSource row per registered source):
+      - ``folder``     — server-local folder path; walked recursively.
+      - ``url_list``   — explicit list of URLs to fetch.
+      - ``db_column``  — values pulled from a WorkspaceConnection by
+                          SELECTing a column, then each value is treated
+                          as a URL or filesystem path and fetched.
+
+    The harvester (services/rag/doc_harvest.py) reads ``config`` based
+    on ``source_kind`` and produces (filename, bytes) tuples for the
+    extractor. Chunks land in ``rag_chunks`` with
+    ``kind='harvested_doc'`` and ``source_key`` of the form
+    ``"docsource:<id>:<filename>"``.
+    """
+
+    __tablename__ = "doc_sources"
+
+    id: Mapped[UUID] = mapped_column(
+        UUIDType, primary_key=True, server_default=_UUID_DEFAULT
+    )
+    workspace_id: Mapped[UUID] = mapped_column(
+        UUIDType,
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    # Per-kind config:
+    #   folder    : {path: "/abs/dir", recursive: true,
+    #                extensions: [".pdf", ".docx"]}
+    #   url_list  : {urls: ["https://...", ...]}
+    #   db_column : {connection_id: "...", table: "documents",
+    #                column: "file_url", url_prefix: "https://..."}
+    config: Mapped[dict[str, Any]] = mapped_column(
+        JSONType, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default=text("'idle'")
+    )
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_harvested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    doc_count: Mapped[int] = mapped_column(
+        nullable=False, server_default=text("0")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "source_kind IN ('folder','url_list','db_column')",
+            name="ck_doc_sources_kind",
+        ),
+        CheckConstraint(
+            "status IN ('idle','harvesting','ready','error')",
+            name="ck_doc_sources_status",
+        ),
+        UniqueConstraint(
+            "workspace_id", "name", name="uq_doc_sources_workspace_name"
+        ),
+        Index("ix_doc_sources_workspace_id", "workspace_id"),
     )
 
 
@@ -589,4 +658,5 @@ __all__ = [
     "Settings",
     "UploadedDocument",
     "RagChunk",
+    "DocSource",
 ]

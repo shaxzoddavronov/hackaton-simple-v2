@@ -161,6 +161,66 @@ export async function deleteConnection(
   }
 }
 
+// ── Document sources (Phase 14) ──
+
+export type DocSourceKind = "folder" | "url_list" | "db_column";
+export type DocSourceStatus = "idle" | "harvesting" | "ready" | "error";
+
+export type DocSource = {
+  id: string;
+  workspace_id: string;
+  name: string;
+  source_kind: DocSourceKind;
+  status: DocSourceStatus;
+  config: Record<string, unknown>;
+  doc_count: number;
+  last_harvested_at: string | null;
+  last_error: string | null;
+};
+
+export async function listDocSources(
+  workspace_id: string,
+): Promise<DocSource[]> {
+  return api<DocSource[]>(`/workspaces/${workspace_id}/doc-sources`);
+}
+
+export async function createDocSource(
+  workspace_id: string,
+  payload: {
+    name: string;
+    source_kind: DocSourceKind;
+    config: Record<string, unknown>;
+  },
+): Promise<DocSource> {
+  return api<DocSource>(`/workspaces/${workspace_id}/doc-sources`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteDocSource(
+  workspace_id: string,
+  source_id: string,
+): Promise<void> {
+  const r = await fetch(
+    `${API_BASE}/workspaces/${workspace_id}/doc-sources/${source_id}`,
+    { method: "DELETE", headers: authHeader() },
+  );
+  if (!r.ok && r.status !== 204) {
+    throw new Error(`Delete failed: ${r.status}`);
+  }
+}
+
+export async function crawlDocSource(
+  workspace_id: string,
+  source_id: string,
+): Promise<DocSource> {
+  return api<DocSource>(
+    `/workspaces/${workspace_id}/doc-sources/${source_id}/crawl`,
+    { method: "POST" },
+  );
+}
+
 export async function uploadDataFile(
   workspace_id: string,
   file: File,

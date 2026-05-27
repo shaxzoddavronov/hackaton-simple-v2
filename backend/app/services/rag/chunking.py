@@ -203,6 +203,54 @@ def chunk_document(
     return chunks
 
 
+def chunk_harvested_doc(
+    source_id: str,
+    filename: str,
+    text: str,
+    *,
+    chunk_size: int = _DOC_CHUNK_SIZE,
+    overlap: int = _DOC_CHUNK_OVERLAP,
+    extra_metadata: dict[str, Any] | None = None,
+) -> list[Chunk]:
+    """Like :func:`chunk_document` but tagged for harvested sources.
+
+    ``source_key`` is ``"docsource:<source_id>:<filename>:<idx>"`` so
+    re-harvesting the same source overwrites stable keys (chunker is
+    deterministic) and orphan-deletion can scope by source_id.
+    """
+    body = (text or "").strip()
+    if not body:
+        return []
+    if chunk_size <= 0 or overlap < 0 or overlap >= chunk_size:
+        raise ValueError("invalid chunking parameters")
+
+    chunks: list[Chunk] = []
+    step = chunk_size - overlap
+    i = 0
+    idx = 0
+    while i < len(body):
+        slice_ = body[i : i + chunk_size]
+        chunk_text_value = f"Document: {filename}\n\n{slice_}"
+        metadata: dict[str, Any] = {
+            "source_id": source_id,
+            "filename": filename,
+            "chunk_index": idx,
+        }
+        if extra_metadata:
+            metadata.update(extra_metadata)
+        chunks.append(
+            Chunk(
+                kind="harvested_doc",
+                source_key=f"docsource:{source_id}:{filename}:{idx}",
+                text=chunk_text_value,
+                metadata=metadata,
+            )
+        )
+        i += step
+        idx += 1
+    return chunks
+
+
 def _get(s: Any, key: str) -> Any:
     if isinstance(s, dict):
         return s.get(key)
@@ -214,4 +262,5 @@ __all__ = [
     "chunk_schema_bundle",
     "chunk_api_endpoints",
     "chunk_document",
+    "chunk_harvested_doc",
 ]

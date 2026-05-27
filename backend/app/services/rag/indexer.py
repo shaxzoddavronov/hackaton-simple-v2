@@ -119,6 +119,88 @@ async def reindex_document(
     return report
 
 
+async def reindex_harvested_source(
+    session: AsyncSession,
+    *,
+    source_id: UUID,
+    workspace_id: UUID,
+    files_iter,
+) -> dict[str, int]:
+    """Drain ``files_iter`` of ``(filename, text)`` tuples, embed them
+    into ``rag_chunks`` with ``kind='harvested_doc'`` scoped to the
+    workspace, and drop chunks for files no longer present.
+
+    ``files_iter`` is provided by the caller (the Celery harvest task)
+    so the indexer doesn't need to know about the three crawl strategies
+    in :mod:`services.doc_harvest`. The iterator may be sync or async.
+    """
+    from app.services.rag.chunking import chunk_harvested_doc
+
+    all_chunks: list[Chunk] = []
+    docs_seen = 0
+    source_prefix = f"docsource:{source_id}:"
+
+    async def _consume(it) -> None:
+        nonlocal docs_seen
+        # Accept both sync iterators (lists, generators) and async ones.
+        if hasattr(it, "__aiter__"):
+            async for fname, text_ in it:
+                chunks = chunk_harvested_doc(
+                    str(source_id), fname, text_,
+                )
+                if chunks:
+                    docs_seen += 1
+                    all_chunks.extend(chunks)
+        else:
+            for fname, text_ in it:
+                chunks = chunk_harvested_doc(
+                    str(source_id), fname, text_,
+                )
+                if chunks:
+                    docs_seen += 1
+                    all_chunks.extend(chunks)
+
+    await _consume(files_iter)
+
+    # Drop ALL existing chunks for this source first, then re-insert.
+    # Wipe-and-reload is honest for harvested sources because files may
+    # have been renamed / removed since the last crawl; diffing would
+    # leak deleted files into the index.
+    await session.execute(
+        delete(RagChunk).where(
+            RagChunk.workspace_id == workspace_id,
+            RagChunk.kind == "harvested_doc",
+            RagChunk.source_key.like(f"{source_prefix}%"),
+        )
+    )
+
+    if not all_chunks:
+        await session.commit()
+        return {"upserted": 0, "skipped": 0, "removed": 0, "docs": 0}
+
+    vectors = await _embed_batched(all_chunks)
+    for c, vec in zip(all_chunks, vectors):
+        session.add(
+            RagChunk(
+                workspace_id=workspace_id,
+                document_id=None,
+                kind=c.kind,
+                source_key=c.source_key,
+                chunk_text=c.text,
+                embedding=_embedding_for_storage(session, vec),
+                chunk_metadata=c.metadata,
+                content_hash=c.content_hash,
+            )
+        )
+    await session.commit()
+    return {
+        "upserted": len(all_chunks),
+        "skipped": 0,
+        "removed": 0,
+        "docs": docs_seen,
+    }
+
+
 # --- internals -------------------------------------------------------------
 
 
@@ -365,4 +447,5 @@ __all__ = [
     "reindex_connection",
     "reindex_api_catalog",
     "reindex_document",
+    "reindex_harvested_source",
 ]

@@ -55,6 +55,14 @@ elasticsearch[async]>=8.0,<9.0
 httpx
 openai
 
+# Document extraction (Phase 14 — harvest folders / URLs / DB-column
+# file references into the RAG index). Pure-python where possible so
+# the wheel set stays manageable.
+pypdf>=4.0          # PDF text extraction
+python-docx>=1.1    # DOCX text extraction
+openpyxl>=3.1       # XLSX text extraction
+beautifulsoup4>=4.12  # HTML cleanup
+
 # Agent orchestration
 langgraph
 langchain-core

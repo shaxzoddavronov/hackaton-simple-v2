@@ -9,15 +9,21 @@ import { GlassPanel } from "@/components/GlassPanel";
 import { useToast } from "@/components/Toast";
 import {
   api,
+  crawlDocSource,
   createConnection,
+  createDocSource,
   deleteConnection,
+  deleteDocSource,
   getToken,
   listConnections,
+  listDocSources,
   refreshConnection,
   testConnection,
   uploadDataFile,
   type ConnectionSummary,
   type Dialect,
+  type DocSource,
+  type DocSourceKind,
   type TestConnectionResult,
 } from "@/lib/api";
 
@@ -241,7 +247,391 @@ export default function WorkspaceDetailPage() {
           ))}
         </div>
       )}
+
+      <DocSourcesSection workspaceId={workspaceId} />
     </main>
+  );
+}
+
+// ── Knowledge sources section ─────────────────────────────────────
+
+const DOC_SOURCE_KIND_LABEL: Record<DocSourceKind, string> = {
+  folder: "Folder",
+  url_list: "URL list",
+  db_column: "DB column",
+};
+
+function DocSourcesSection({ workspaceId }: { workspaceId: string }) {
+  const toast = useToast();
+  const [sources, setSources] = useState<DocSource[] | null>(null);
+  const [showForm, setShowForm] = useState(false);
+
+  const refresh = useCallback(async () => {
+    try {
+      const rows = await listDocSources(workspaceId);
+      setSources(rows);
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "Failed to load doc sources",
+      );
+    }
+  }, [workspaceId, toast]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  async function onCrawl(id: string) {
+    try {
+      await crawlDocSource(workspaceId, id);
+      toast.info("Crawl started");
+      await refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to crawl");
+    }
+  }
+
+  async function onDelete(id: string) {
+    if (
+      !window.confirm(
+        "Bu manba va undagi barcha hujjat chunki o'chiriladi. Davom etilsinmi?",
+      )
+    ) {
+      return;
+    }
+    try {
+      await deleteDocSource(workspaceId, id);
+      toast.success("Source removed");
+      await refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to delete");
+    }
+  }
+
+  return (
+    <section className="space-y-3 pt-4">
+      <div className="flex items-end justify-between">
+        <div>
+          <h2 className="font-headline text-headline-md text-on-surface">
+            Knowledge sources
+          </h2>
+          <p className="text-on-surface-variant text-sm">
+            Harvest PDFs, Office docs and HTML from folders, URLs or
+            DB-column file references. Indexed in Uzbek, Russian and
+            English via bge-m3 — the agent retrieves the most relevant
+            files regardless of question language.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowForm(true)}
+          className="rounded-xl bg-surface-container-high/60 border border-outline/20 text-on-surface px-3 py-1.5 font-semibold"
+        >
+          + Add source
+        </button>
+      </div>
+
+      {showForm ? (
+        <AddDocSourcePanel
+          workspaceId={workspaceId}
+          onCancel={() => setShowForm(false)}
+          onCreated={async () => {
+            setShowForm(false);
+            await refresh();
+          }}
+        />
+      ) : null}
+
+      {sources === null ? (
+        <GlassPanel className="px-5 py-3 text-on-surface-variant text-sm">
+          Loading…
+        </GlassPanel>
+      ) : sources.length === 0 ? (
+        <GlassPanel className="px-5 py-4 text-on-surface-variant text-sm">
+          No knowledge sources yet. Add one to ingest documents into RAG.
+        </GlassPanel>
+      ) : (
+        <div className="space-y-2">
+          {sources.map((s) => (
+            <GlassPanel key={s.id} className="px-5 py-3">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <div className="font-headline text-on-surface text-base">
+                    {s.name}
+                  </div>
+                  <div className="text-on-surface-variant text-xs uppercase tracking-wider">
+                    {DOC_SOURCE_KIND_LABEL[s.source_kind] ?? s.source_kind}
+                    {" · "}
+                    {s.doc_count} docs
+                    {s.last_harvested_at
+                      ? " · last " +
+                        new Date(s.last_harvested_at).toLocaleString()
+                      : ""}
+                  </div>
+                  {s.last_error ? (
+                    <div className="text-error text-xs mt-1">
+                      {s.last_error}
+                    </div>
+                  ) : null}
+                </div>
+                <span
+                  className={
+                    "text-xs uppercase tracking-wider " +
+                    (STATUS_TINT[s.status] ?? "text-on-surface-variant")
+                  }
+                >
+                  {s.status}
+                </span>
+              </div>
+              <div className="flex gap-3 pt-2 text-sm">
+                <button
+                  type="button"
+                  onClick={() => onCrawl(s.id)}
+                  className="text-primary hover:underline"
+                >
+                  Crawl now
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDelete(s.id)}
+                  className="text-error hover:underline"
+                >
+                  Delete
+                </button>
+              </div>
+            </GlassPanel>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AddDocSourcePanel({
+  workspaceId,
+  onCancel,
+  onCreated,
+}: {
+  workspaceId: string;
+  onCancel: () => void;
+  onCreated: () => Promise<void>;
+}) {
+  const toast = useToast();
+  const [name, setName] = useState("");
+  const [kind, setKind] = useState<DocSourceKind>("folder");
+  // folder
+  const [folderPath, setFolderPath] = useState("");
+  const [folderRecursive, setFolderRecursive] = useState(true);
+  // url_list
+  const [urlListText, setUrlListText] = useState("");
+  // db_column
+  const [dbConnId, setDbConnId] = useState("");
+  const [dbTable, setDbTable] = useState("");
+  const [dbColumn, setDbColumn] = useState("");
+  const [dbUrlPrefix, setDbUrlPrefix] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      let config: Record<string, unknown> = {};
+      if (kind === "folder") {
+        config = { path: folderPath, recursive: folderRecursive };
+      } else if (kind === "url_list") {
+        const urls = urlListText
+          .split(/\r?\n/)
+          .map((u) => u.trim())
+          .filter(Boolean);
+        if (urls.length === 0) {
+          toast.error("URL list cannot be empty");
+          setBusy(false);
+          return;
+        }
+        config = { urls };
+      } else {
+        config = {
+          connection_id: dbConnId,
+          table: dbTable,
+          column: dbColumn,
+          ...(dbUrlPrefix ? { url_prefix: dbUrlPrefix } : {}),
+        };
+      }
+      await createDocSource(workspaceId, {
+        name,
+        source_kind: kind,
+        config,
+      });
+      toast.success("Source created — click 'Crawl now' to ingest");
+      await onCreated();
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "Failed to create source",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <GlassPanel className="px-5 py-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="font-headline text-on-surface text-base">
+          Add knowledge source
+        </h3>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="text-on-surface-variant text-sm hover:text-on-surface"
+        >
+          Cancel
+        </button>
+      </div>
+      <form onSubmit={submit} className="space-y-3">
+        <label className="block space-y-1">
+          <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+            Name
+          </span>
+          <input
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="hr-handbook"
+            className="w-full input"
+          />
+        </label>
+
+        <div className="space-y-1">
+          <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+            Source kind
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                { v: "folder", label: "Folder" },
+                { v: "url_list", label: "URL list" },
+                { v: "db_column", label: "DB column" },
+              ] as const
+            ).map((m) => (
+              <button
+                key={m.v}
+                type="button"
+                onClick={() => setKind(m.v)}
+                className={
+                  "px-3 py-1.5 rounded-xl text-sm " +
+                  (kind === m.v
+                    ? "bg-primary-container/30 text-primary"
+                    : "bg-surface-container-high/40 text-on-surface-variant")
+                }
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {kind === "folder" ? (
+          <>
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                Folder path (server-local or mounted)
+              </span>
+              <input
+                required
+                value={folderPath}
+                onChange={(e) => setFolderPath(e.target.value)}
+                placeholder="/data/docs"
+                className="w-full input"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm text-on-surface-variant">
+              <input
+                type="checkbox"
+                checked={folderRecursive}
+                onChange={(e) => setFolderRecursive(e.target.checked)}
+              />
+              Recurse into subfolders
+            </label>
+          </>
+        ) : null}
+
+        {kind === "url_list" ? (
+          <label className="block space-y-1">
+            <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              URLs (one per line, https only)
+            </span>
+            <textarea
+              required
+              value={urlListText}
+              onChange={(e) => setUrlListText(e.target.value)}
+              placeholder="https://example.com/docs/policy.pdf"
+              rows={5}
+              className="w-full input font-mono text-xs"
+            />
+          </label>
+        ) : null}
+
+        {kind === "db_column" ? (
+          <>
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                Connection UUID
+              </span>
+              <input
+                required
+                value={dbConnId}
+                onChange={(e) => setDbConnId(e.target.value)}
+                placeholder="<copy from a connection row above>"
+                className="w-full input font-mono text-xs"
+              />
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  Table
+                </span>
+                <input
+                  required
+                  value={dbTable}
+                  onChange={(e) => setDbTable(e.target.value)}
+                  className="w-full input"
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  Column with file path/URL
+                </span>
+                <input
+                  required
+                  value={dbColumn}
+                  onChange={(e) => setDbColumn(e.target.value)}
+                  className="w-full input"
+                />
+              </label>
+            </div>
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                URL prefix (optional — prepended to relative values)
+              </span>
+              <input
+                value={dbUrlPrefix}
+                onChange={(e) => setDbUrlPrefix(e.target.value)}
+                placeholder="https://files.example.com"
+                className="w-full input"
+              />
+            </label>
+          </>
+        ) : null}
+
+        <button
+          type="submit"
+          disabled={busy}
+          className="w-full rounded-xl bg-primary-container text-on-primary-container py-2 font-semibold disabled:opacity-50"
+        >
+          {busy ? "Creating…" : "Create source"}
+        </button>
+      </form>
+    </GlassPanel>
   );
 }
 
