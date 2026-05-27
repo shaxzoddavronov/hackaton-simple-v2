@@ -15,6 +15,7 @@ import {
   listConnections,
   refreshConnection,
   testConnection,
+  uploadDataFile,
   type ConnectionSummary,
   type Dialect,
   type TestConnectionResult,
@@ -104,6 +105,16 @@ export default function WorkspaceDetailPage() {
     }
   }
 
+  async function onUploadFile(file: File) {
+    try {
+      await uploadDataFile(workspaceId, file);
+      toast.success(`${file.name} uploaded — profiling started`);
+      await refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Upload failed");
+    }
+  }
+
   return (
     <main className="mx-auto max-w-4xl px-4 py-8 space-y-6">
       <header className="flex items-end justify-between">
@@ -126,6 +137,19 @@ export default function WorkspaceDetailPage() {
           >
             Open chat
           </Link>
+          <label className="rounded-xl bg-surface-container-high/60 border border-outline/20 text-on-surface px-4 py-2 font-semibold cursor-pointer">
+            Upload data file
+            <input
+              type="file"
+              accept=".csv,.tsv,.parquet,.pq,.json,.ndjson,.jsonl"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (f) void onUploadFile(f);
+              }}
+            />
+          </label>
           <button
             type="button"
             onClick={() => setShowForm(true)}

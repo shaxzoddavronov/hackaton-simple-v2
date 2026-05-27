@@ -65,6 +65,31 @@ def _duckdb_dtype(desc_entry: Any) -> str:
     return "string"
 
 
+_DATA_FILE_LOADERS: dict[str, str] = {
+    # Map a recognized extension → the DuckDB table function used to
+    # surface it as a SELECT source. `read_csv_auto` infers headers /
+    # types, `read_parquet` handles Parquet, `read_json_auto` handles
+    # both arrays-of-objects and NDJSON.
+    ".csv": "read_csv_auto",
+    ".tsv": "read_csv_auto",
+    ".parquet": "read_parquet",
+    ".pq": "read_parquet",
+    ".json": "read_json_auto",
+    ".ndjson": "read_json_auto",
+    ".jsonl": "read_json_auto",
+}
+
+
+def _loader_for(path: str) -> str | None:
+    """Return the DuckDB reader function for ``path`` or ``None`` if the
+    extension isn't one we surface as an auto-VIEW."""
+    lowered = path.lower()
+    for ext, fn in _DATA_FILE_LOADERS.items():
+        if lowered.endswith(ext):
+            return fn
+    return None
+
+
 @register("duckdb")
 class DuckdbEngine:
     dialect: Dialect = "duckdb"
@@ -77,14 +102,63 @@ class DuckdbEngine:
         self._path = meta.get("path")
         if not self._path:
             raise ValueError("DuckDB connection_meta must include 'path'")
+
+        # ``attached_files`` (optional): list of {path, view_name} dicts
+        # that the engine surfaces as read-only views over CSV/Parquet/
+        # JSON files on disk. This is how data-file uploads land — each
+        # upload becomes a WorkspaceConnection with path=":memory:" and
+        # one entry in attached_files. The view is created fresh on
+        # every connect (since :memory: has no persistence).
+        raw_attached = meta.get("attached_files") or []
+        if not isinstance(raw_attached, list):
+            raise ValueError(
+                "DuckDB connection_meta.attached_files must be a list"
+            )
+        self._attached: list[dict[str, str]] = []
+        for entry in raw_attached:
+            if not isinstance(entry, dict):
+                raise ValueError(
+                    "Each attached_files entry must be a {path, view_name} dict"
+                )
+            ap = str(entry.get("path") or "")
+            vn = str(entry.get("view_name") or "")
+            if not ap or not vn:
+                raise ValueError(
+                    "attached_files entries require both 'path' and 'view_name'"
+                )
+            if _loader_for(ap) is None:
+                raise ValueError(
+                    f"Unsupported data file extension: {ap!r}. "
+                    f"Supported: {sorted(_DATA_FILE_LOADERS)}"
+                )
+            self._attached.append({"path": ap, "view_name": vn})
+
         # DuckDB requires read-write on :memory: because the schema can
-        # only be created inside the connection that opened it. For
-        # on-disk files we get full read-only enforcement at the engine
-        # layer in addition to the AST validator.
-        self._read_only = self._path != ":memory:"
+        # only be created inside the connection that opened it. Same goes
+        # for any connection that attaches data files (it has to CREATE
+        # VIEW). For on-disk files with no attachments we get full
+        # read-only enforcement at the engine layer in addition to the
+        # AST validator.
+        self._read_only = self._path != ":memory:" and not self._attached
 
     def _connect_sync(self) -> duckdb.DuckDBPyConnection:
-        return duckdb.connect(database=self._path, read_only=self._read_only)
+        conn = duckdb.connect(database=self._path, read_only=self._read_only)
+        # Materialise attached files as views. We do this on every
+        # connect because :memory: doesn't persist them — and even for
+        # on-disk DBs that opted into attachments, repeated CREATE OR
+        # REPLACE is a no-op if the view already exists with the same
+        # body. Identifier quoting protects against shell-style names;
+        # the path is single-quoted so apostrophes inside it would need
+        # escaping — sanitised at the upload route before it lands here.
+        for entry in self._attached:
+            fn = _loader_for(entry["path"]) or "read_csv_auto"
+            vname = entry["view_name"].replace('"', '""')
+            ppath = entry["path"].replace("'", "''")
+            conn.execute(
+                f'CREATE OR REPLACE VIEW "{vname}" AS '
+                f"SELECT * FROM {fn}('{ppath}')"
+            )
+        return conn
 
     async def _connect(self) -> duckdb.DuckDBPyConnection:
         return await asyncio.to_thread(self._connect_sync)
@@ -94,11 +168,19 @@ class DuckdbEngine:
             conn = self._connect_sync()
             try:
                 schemas_filter = ", ".join(f"'{s}'" for s in _SYSTEM_SCHEMAS)
+                # Include VIEWs as well as BASE TABLEs — Phase 13 surfaces
+                # uploaded CSV/Parquet/JSON files as DuckDB views over
+                # read_csv_auto / read_parquet / read_json_auto, and those
+                # need to appear in the schema bundle so the planner can
+                # SELECT from them. ``LOCAL TEMPORARY`` views land in the
+                # ``main`` schema with table_type='LOCAL TEMPORARY' on
+                # some DuckDB versions; ``VIEW`` covers the persistent
+                # case. We accept both.
                 table_rows = conn.execute(
                     f"""
                     SELECT table_schema, table_name
                     FROM information_schema.tables
-                    WHERE table_type = 'BASE TABLE'
+                    WHERE table_type IN ('BASE TABLE', 'VIEW', 'LOCAL TEMPORARY')
                       AND table_schema NOT IN ({schemas_filter})
                     ORDER BY table_schema, table_name
                     """

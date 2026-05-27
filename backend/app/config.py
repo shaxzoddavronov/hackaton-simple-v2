@@ -98,6 +98,17 @@ class Settings(BaseSettings):
     RAG_DIFF_CHECK_HOUR_UTC: int = Field(default=0, ge=0, le=23)
     RAG_DIFF_CHECK_MINUTE_UTC: int = Field(default=0, ge=0, le=59)
 
+    # --- Data file uploads ------------------------------------------------------
+    # Where CSV / Parquet / JSON uploads land (Phase 13). One subdirectory
+    # per workspace UUID. Configurable so multi-replica deploys can point
+    # at a shared volume (NFS, EFS) — single-node dev defaults to a path
+    # under the backend cwd.
+    DATA_FILES_DIR: str = Field(default="./data_files")
+    # Hard cap per upload. CSVs above this size should be loaded into a
+    # real database; DuckDB will happily handle hundreds of MB but the
+    # multipart upload path isn't the right transport.
+    DATA_FILE_MAX_BYTES: int = Field(default=50 * 1024 * 1024, ge=1)
+
     # --- Federation ------------------------------------------------------------
     # Per-connection table cap in the federated_planner prompt. Keeps the
     # token budget bounded when a workspace has many large DBs.

@@ -161,6 +161,27 @@ export async function deleteConnection(
   }
 }
 
+export async function uploadDataFile(
+  workspace_id: string,
+  file: File,
+): Promise<ConnectionSummary> {
+  const form = new FormData();
+  form.append("file", file);
+  const r = await fetch(
+    `${API_BASE}/workspaces/${workspace_id}/data-files`,
+    {
+      method: "POST",
+      headers: authHeader(),
+      body: form,
+    },
+  );
+  if (!r.ok) {
+    const detail = await r.text();
+    throw new Error(`${r.status} ${r.statusText}: ${detail}`);
+  }
+  return (await r.json()) as ConnectionSummary;
+}
+
 export async function refreshConnection(
   workspace_id: string,
   connection_id: string,

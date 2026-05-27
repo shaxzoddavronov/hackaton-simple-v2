@@ -33,6 +33,7 @@ for noisy in ("httpx", "httpcore", "asyncio", "sqlalchemy.engine"):
 from app.api import (
     auth,
     chat,
+    data_files,
     documents,
     schema,
     settings as settings_router,
@@ -165,6 +166,7 @@ def create_app() -> FastAPI:
     app.include_router(schema.router)
     app.include_router(settings_router.router)
     app.include_router(documents.router)
+    app.include_router(data_files.router)
 
     # Default HTTP histograms + counters under /metrics. ``instrument()``
     # wraps every handler registered so far; ``expose()`` mounts the
