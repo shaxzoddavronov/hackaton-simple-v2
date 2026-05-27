@@ -16,6 +16,15 @@ _SQL_SYSTEM = (
     "Generate exactly one SELECT (with optional WITH/CTEs) that answers "
     "the user's question against the provided schema.\n"
     "\n"
+    "Conversation context — IMPORTANT:\n"
+    "  When prior turns are present, treat short messages like "
+    "'show as chart' / 'grafik korinishda korsat' / 'more detail' / "
+    "'aniq ber' as REFERENCES to the previous data question. Re-emit a "
+    "SQL that answers the previous user question — do NOT pick a "
+    "different table just because the new phrase mentions something "
+    "off-topic. The chart_designer is what changes the visualization; "
+    "you write the same SQL.\n"
+    "\n"
     "Rules:\n"
     "  * SELECT only, no DML/DDL, no system tables, no pg_sleep/load_file.\n"
     "  * Reference ONLY tables and columns that appear in the schema.\n"
@@ -104,15 +113,37 @@ _ES_SYSTEM = (
     "`script_fields`, `scripted_metric`, `runtime_mappings` with "
     "scripts, `_delete_by_query`, `_update_by_query`, or `_reindex`.\n"
     "  * Reference ONLY indices and fields from the schema.\n"
-    "  * Do NOT add time filters the user did not ask for.\n"
     "  * If the user asks for a COUNT or AGGREGATE, set body.size to 0 "
     "and use body.aggs.\n"
     "  * If the user wants raw documents, keep body.size <= 50 and use "
     "body.sort to order them.\n"
     "  * Use keyword sub-fields for term aggregations on text fields: "
     "if the mapping shows `name` as text, prefer `name.keyword`.\n"
+    "  * NEVER use the name `doc_count` for a sub-aggregation — that "
+    "overrides the bucket's automatic doc count and confuses charts.\n"
     "\n"
-    "Common patterns:\n"
+    "Time-window parsing — IMPORTANT:\n"
+    "  Read the user's NATURAL-LANGUAGE date phrase and translate it "
+    "into a body.query.bool.filter.range clause. Do NOT skip the filter "
+    "when the user mentioned a window. The most common cases:\n"
+    "    'uch oylik' / 'oxirgi 3 oy' / 'last 3 months' / 'past quarter' "
+    "→ {\"range\":{\"<date_field>\":{\"gte\":\"now-3M/d\"}}}\n"
+    "    'oxirgi 30 kun' / 'last 30 days'                       "
+    "→ {\"range\":{\"<date_field>\":{\"gte\":\"now-30d/d\"}}}\n"
+    "    'shu hafta' / 'this week'                              "
+    "→ {\"range\":{\"<date_field>\":{\"gte\":\"now/w\"}}}\n"
+    "    'shu oy' / 'this month'                                "
+    "→ {\"range\":{\"<date_field>\":{\"gte\":\"now/M\"}}}\n"
+    "    'shu yil' / 'this year' / 'yil davomida'               "
+    "→ {\"range\":{\"<date_field>\":{\"gte\":\"now/y\"}}}\n"
+    "    '2024 yil' / 'in 2024'                                 "
+    "→ {\"range\":{\"<date_field>\":{\"gte\":\"2024-01-01\","
+    "\"lt\":\"2025-01-01\"}}}\n"
+    "  Pick the most plausible date field from the schema (`created_at`, "
+    "`@timestamp`, `ordered_at`, `event_time`, etc.). If the user gave "
+    "NO time hint, omit the range filter.\n"
+    "\n"
+    "Common aggregation patterns:\n"
     "  * 'how many X' → size=0, aggs that bucket / count.\n"
     "  * 'top N by Y' → aggs.terms on the group field with size=N, a "
     "metric sub-agg (sum / avg) on Y, ORDER BY the metric DESC by "
@@ -127,6 +158,16 @@ _ES_SYSTEM = (
     '[{"range":{"ordered_at":{"gte":"now/M"}}}]}},"aggs":{"by_customer":'
     '{"terms":{"field":"customer.keyword","size":5,"order":{"total":'
     '"desc"}},"aggs":{"total":{"sum":{"field":"amount"}}}}}}}\n'
+    "\n"
+    "Example — 'uch oylik savdoni grafik korinishda korsat' over index "
+    "`_all` with `created_at` and `metadata.revenue_usd`:\n"
+    '    {"index":"_all","body":{"size":0,"query":{"bool":{"filter":'
+    '[{"range":{"created_at":{"gte":"now-3M/d"}}}]}},"aggs":'
+    '{"revenue_trend":{"date_histogram":{"field":"created_at",'
+    '"calendar_interval":"month"},"aggs":{"total_revenue":{"sum":'
+    '{"field":"metadata.revenue_usd"}}}}}}}\n'
+    "  (Note the range filter — without it the planner returns the "
+    "entire history instead of the requested 3 months.)\n"
     "\n"
     "Plan ONE request only. If the schema cannot answer the question, "
     "write the closest meaningful aggregation and explain in the "
@@ -221,15 +262,23 @@ async def run(state: GraphState) -> GraphState:
         + "Return a SqlPlan."
     )
 
+    # Inject recent turns so the planner can resolve follow-ups like
+    # "show as chart" against the previous user question.
+    history = state.get("conversation_history") or []
+    messages: list[dict[str, object]] = [
+        {"role": "system", "content": system_prompt}
+    ]
+    for h in history[-6:]:
+        role = h.get("role", "user")
+        content = h.get("content", "")
+        if role not in ("user", "assistant") or not content:
+            continue
+        messages.append({"role": role, "content": content})
+    messages.append({"role": "user", "content": prompt_user})
+
     llm = get_llm()
     try:
-        plan = await llm.structured(
-            [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt_user},
-            ],
-            SqlPlan,
-        )
+        plan = await llm.structured(messages, SqlPlan)
     except ValidationError as e:
         # LLMClient already tried salvage + a repair turn. We still
         # failed schema validation — feed the failure back into the

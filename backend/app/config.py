@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     # Default covers both :3000 (vanilla Next.js) and :3001 (used in this
     # repo because :3000 may be taken by a local LLM UI).
     CORS_ORIGINS: str = Field(
-        default="http://localhost:3000,http://localhost:3001"
+        default="*"
     )
 
     # --- Local LLM (vLLM, OpenAI-compatible) ------------------------------------

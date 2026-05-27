@@ -8,7 +8,13 @@ from app.schemas.llm_io import AnswerDraft
 _SYSTEM = (
     "You are an analyst who writes 2-3 sentence summaries of SQL results. "
     "Use only the numbers and labels you are shown. Do not invent values. "
-    "Highlight the key takeaway in the headline; back it up in body_md."
+    "Highlight the key takeaway in the headline; back it up in body_md.\n"
+    "\n"
+    "LANGUAGE — STRICT: respond in the SAME LANGUAGE the user wrote "
+    "their most recent message in. If the user wrote in Uzbek, answer in "
+    "Uzbek. If in English, answer in English. If in Russian, answer in "
+    "Russian. Never switch to a different language just because the "
+    "prior turn was in English."
 )
 
 # Used for chitchat / metadata intents. The metadata branch additionally
@@ -19,6 +25,10 @@ _META_SYSTEM = (
     "the database schema. ONLY reference tables and columns that appear "
     "in the schema. Never invent names. If the schema cannot answer the "
     "question, say so and suggest the closest alternative.\n"
+    "\n"
+    "LANGUAGE — STRICT: respond in the SAME LANGUAGE the user wrote "
+    "their question in. Uzbek question → Uzbek answer. English → "
+    "English. Russian → Russian. NEVER answer in a different language.\n"
     "\n"
     "Length rules — STRICT:\n"
     "  * headline: ONE short sentence (max 12 words).\n"
@@ -71,6 +81,19 @@ async def run(state: GraphState) -> GraphState:
     rs = state.get("result")
     intent = state.get("intent")
 
+    history = state.get("conversation_history") or []
+
+    def _with_history(system: str, user_prompt: str) -> list[dict[str, object]]:
+        msgs: list[dict[str, object]] = [{"role": "system", "content": system}]
+        for h in history[-6:]:
+            role = h.get("role", "user")
+            content = h.get("content", "")
+            if role not in ("user", "assistant") or not content:
+                continue
+            msgs.append({"role": role, "content": content})
+        msgs.append({"role": "user", "content": user_prompt})
+        return msgs
+
     # ── Metadata / chitchat path ─────────────────────────────────────
     if rs is None and intent in {"chitchat", "metadata"}:
         llm = get_llm()
@@ -81,16 +104,20 @@ async def run(state: GraphState) -> GraphState:
             user_prompt = (
                 f"Schema:\n{schema_text}\n\n"
                 f"User question: {state.get('user_message','')}\n\n"
-                "Answer the question using ONLY the tables and columns in "
-                "the schema above. Return an AnswerDraft."
+                "Answer using ONLY the tables and columns in the schema "
+                "above. Match the user's language. Return an AnswerDraft."
             )
             system_prompt = _META_SYSTEM
         else:
-            # chitchat — no schema needed
+            # chitchat — no schema, but still match language + see history.
             user_prompt = state.get("user_message", "")
             system_prompt = (
-                "You answer brief conversational questions about a NL-to-SQL "
-                "tool called QueryMind. Keep it short and helpful."
+                "You answer brief conversational questions about a "
+                "NL-to-SQL tool called QueryMind. Keep it short and "
+                "helpful.\n\n"
+                "LANGUAGE — STRICT: respond in the SAME LANGUAGE the "
+                "user wrote their question in. Uzbek → Uzbek, English "
+                "→ English, Russian → Russian. Never switch."
             )
 
         # AnswerDraft for metadata can run long when the model lists
@@ -98,10 +125,7 @@ async def run(state: GraphState) -> GraphState:
         # ~800-char target so we don't truncate mid-string and trip
         # the salvage layer.
         draft = await llm.structured(
-            [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
+            _with_history(system_prompt, user_prompt),
             AnswerDraft,
             max_tokens=2048,
         )
@@ -114,13 +138,10 @@ async def run(state: GraphState) -> GraphState:
     prompt = (
         f"Question: {state.get('user_message','')}\n\n"
         f"Result shape:\n{_result_shape(rs)}\n\n"
-        "Return an AnswerDraft."
+        "Return an AnswerDraft in the user's language."
     )
     draft = await llm.structured(
-        [
-            {"role": "system", "content": _SYSTEM},
-            {"role": "user", "content": prompt},
-        ],
+        _with_history(_SYSTEM, prompt),
         AnswerDraft,
         max_tokens=2048,
     )

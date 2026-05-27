@@ -146,10 +146,19 @@ def _pick_spec(rs: ResultSet, user_message: str) -> UISpec:
         row = rs.rows[0]
         if nums:
             num_idx = nums[0]
-            value = row[num_idx]
+            raw = row[num_idx]
+            # KPI.value is ``float | str`` per the Pydantic schema, but
+            # a misbehaving driver (asyncpg returning a JSONB cell, a
+            # Postgres composite type, an ES aggregation we didn't
+            # flatten cleanly) could hand us a dict here. Pydantic
+            # would coerce silently and the frontend would then crash
+            # with "Objects are not valid as a React child". Force a
+            # primitive shape ourselves so the contract holds.
+            value = _coerce_to_primitive(raw)
             label_idx = others[0] if others else None
             if label_idx is not None:
-                label = f"{_pretty_label(rs.columns[num_idx])} — {row[label_idx]}"
+                label_val = _coerce_to_primitive(row[label_idx])
+                label = f"{_pretty_label(rs.columns[num_idx])} — {label_val}"
             else:
                 label = _pretty_label(rs.columns[num_idx])
             return KPI(
@@ -213,3 +222,44 @@ async def run(state: GraphState) -> GraphState:
         log.exception("chart_designer: rule pick failed; falling back to text")
         spec = TextOnly(type="text_only", body_md="(could not build a chart)")
     return {"chart": spec}
+
+
+def _coerce_to_primitive(value: Any) -> Any:
+    """Return a JSON-renderable primitive for ``value``.
+
+    Postgres / ES drivers return rich types we can't put straight into
+    a KPI label or a chart datapoint: Decimal, datetime, asyncpg
+    composite tuples, JSONB cells holding a dict, and so on. Pydantic
+    will silently accept some of these and then the frontend explodes
+    with "Objects are not valid as a React child". We pre-flatten:
+
+      * ``None`` → ``None`` (caller decides how to display).
+      * bool/int/float/str → unchanged.
+      * datetime / date / time → ISO string.
+      * Decimal → float (lossless for analytics-scale numbers).
+      * dict / list / tuple → JSON-encoded string.
+      * Anything else → ``str(...)``.
+    """
+    from datetime import date, datetime, time
+    from decimal import Decimal
+    import json as _json
+
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float, str)):
+        return value
+    if isinstance(value, Decimal):
+        try:
+            return float(value)
+        except (ValueError, OverflowError):
+            return str(value)
+    if isinstance(value, (datetime, date, time)):
+        return value.isoformat()
+    if isinstance(value, (dict, list, tuple)):
+        try:
+            return _json.dumps(value, default=str, ensure_ascii=False)
+        except (TypeError, ValueError):
+            return str(value)
+    return str(value)

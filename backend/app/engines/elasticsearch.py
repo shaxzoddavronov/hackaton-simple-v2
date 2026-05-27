@@ -341,12 +341,34 @@ def _flatten_aggregations(
     rows: list[list[Any]] = []
     for b in buckets:
         key = b.get("key_as_string") or b.get("key")
-        row = [key, b.get("doc_count")]
+        # ``doc_count`` is normally an int (the bucket's auto count),
+        # but a planner that wrote a SUB-AGGREGATION named ``doc_count``
+        # (e.g. ``aggs.doc_count.value_count``) overwrites the bucket
+        # field with a dict like ``{"value": N}``. Run the same metric
+        # unwrap we use for sub_keys so the table cell is always a
+        # primitive — otherwise it leaks into BarSpec.data as
+        # ``{"value": 0}`` and crashes the frontend with "Objects are
+        # not valid as a React child".
+        row = [key, _extract_metric(b.get("doc_count"))]
         for sk in sub_keys:
             sub = b.get(sk)
             row.append(_extract_metric(sub))
         rows.append(row)
-    dtypes = ["string", "bigint"] + ["float"] * len(sub_keys)
+    # date_histogram buckets carry a ``key_as_string`` for every entry
+    # AND a numeric epoch ``key``. Detect that shape so chart_designer
+    # picks a line chart instead of degrading to a table just because
+    # the dtype defaulted to "string".
+    key_dtype = (
+        "timestamp"
+        if buckets
+        and all(
+            isinstance(b.get("key_as_string"), str)
+            and _looks_like_iso_date(b["key_as_string"])
+            for b in buckets
+        )
+        else "string"
+    )
+    dtypes = [key_dtype, "bigint"] + ["float"] * len(sub_keys)
     return columns, dtypes, rows
 
 
@@ -358,3 +380,15 @@ def _extract_metric(node: Any) -> Any:
         if k in node:
             return node[k]
     return node
+
+
+_ISO_DATE_RE = __import__("re").compile(
+    r"^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?$"
+)
+
+
+def _looks_like_iso_date(s: str) -> bool:
+    """Heuristic — accept dates / datetimes that ES emits via
+    ``key_as_string`` (e.g. ``"2026-04-01T00:00:00.000Z"`` or
+    ``"2026-04-01"``)."""
+    return bool(_ISO_DATE_RE.match(s))

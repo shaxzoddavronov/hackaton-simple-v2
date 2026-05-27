@@ -69,37 +69,55 @@ services:
   #   networks:
   #     - qm_dev
 
-  # Triton Inference Server — serves the bge-m3 embedding model used by RAG.
-  # Drop your packaged model into ./triton-models/bge_m3/ (see infra/README.md
-  # for the expected layout) and uncomment. The agent runs without it via
-  # BM25 fallback, but RAG-quality retrieval requires it.
+  # Triton Inference Server — serves bge-m3 dense embeddings for the
+  # RAG layer. Built from ./triton/Dockerfile so sentence-transformers
+  # and CPU torch are baked in. First start downloads bge-m3 (~2 GB)
+  # into the named `triton_cache` volume; subsequent starts use the
+  # cache.
   #
-  # triton:
-  #   image: nvcr.io/nvidia/tritonserver:24.06-py3
-  #   container_name: qm_triton
-  #   command: >
-  #     tritonserver --model-repository=/models
-  #     --http-port=8001
-  #     --strict-model-config=false
-  #   ports:
-  #     - "8001:8001"   # HTTP — matches Settings.TRITON_URL default
-  #     - "8002:8002"   # metrics
-  #   volumes:
-  #     - ./triton-models:/models:ro
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - driver: nvidia
-  #             count: 1
-  #             capabilities: ["gpu"]
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:8001/v2/health/ready"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 10
-  #   networks:
-  #     - qm_dev
+  # The agent gracefully falls back to BM25 schema pruning when this
+  # service is offline (see services/rag/retriever.py), so it's safe
+  # to skip with `docker compose up postgres redis` during early dev.
+  triton:
+    build:
+      context: ./triton
+      dockerfile: Dockerfile
+    image: querymind/triton-bge-m3:local
+    container_name: qm_triton
+    command:
+      - tritonserver
+      - --model-repository=/models
+      - --http-port=8001
+      - --strict-model-config=false
+      - --log-verbose=1
+    environment:
+      # Force CPU mode so the image works on GPU-less hosts. Unset or
+      # set to "0" to let sentence-transformers pick CUDA when the
+      # image is rebuilt with a CUDA torch wheel.
+      TRITON_FORCE_CPU: "1"
+    ports:
+      - "8001:8001"   # HTTP — matches Settings.TRITON_URL default
+      - "8002:8002"   # Prometheus metrics
+    volumes:
+      - ./triton/model_repository:/models:ro
+      - triton_cache:/root/.cache/huggingface
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8001/v2/health/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 120s  # bge-m3 download + load on first run
+    networks:
+      - qm_dev
+    # Uncomment to enable GPU acceleration (rebuild the Dockerfile with
+    # CUDA torch first).
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: ["gpu"]
 
 networks:
   qm_dev:
@@ -107,3 +125,4 @@ networks:
 
 volumes:
   pgdata:
+  triton_cache:

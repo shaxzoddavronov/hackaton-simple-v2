@@ -1,0 +1,44 @@
+# Triton model config for bge-m3 served via the Python backend.
+#
+# Shape contract — must match `app/services/rag/triton_client.py`:
+#   * Input  "TEXT": BYTES, 1-D variable length. The client packs N
+#     strings as `{"name":"TEXT","shape":[N],"datatype":"BYTES",
+#     "data":["text1","text2",...]}`.
+#   * Output "embedding": FP32, shape [N, 1024]. bge-m3's pooled +
+#     L2-normalized dense vector dimension is 1024.
+#
+# `max_batch_size: 0` disables Triton's auto-batching wrapper, so the
+# inner Python `execute()` function sees exactly what the client sent
+# without an extra batch axis injected on top. Real batching is done
+# CLIENT-side via the existing `RAG_INDEX_BATCH` setting — that keeps
+# the Python backend simple and predictable.
+
+name: "bge_m3"
+backend: "python"
+max_batch_size: 0
+
+input [
+  {
+    name: "TEXT"
+    data_type: TYPE_STRING
+    dims: [ -1 ]
+  }
+]
+
+output [
+  {
+    name: "embedding"
+    data_type: TYPE_FP32
+    dims: [ -1, 1024 ]
+  }
+]
+
+# Single CPU instance is enough for hackathon load. Increase `count`
+# to allow parallel requests, or change `kind: KIND_GPU` if you build
+# the image with CUDA torch.
+instance_group [
+  {
+    count: 1
+    kind: KIND_CPU
+  }
+]

@@ -120,6 +120,23 @@ async def post_chat(
     if payload.active_connection_id is not None:
         chat_session.connection_id = payload.active_connection_id
 
+    # Load recent conversation history BEFORE appending the new user
+    # message so the agent sees what came before. Last 10 turns (5 user
+    # + 5 assistant) is enough for follow-ups like "show as chart"
+    # without bloating prompts. Stored oldest → newest.
+    history_rows = await session.execute(
+        select(Message)
+        .where(Message.session_id == chat_session.id)
+        .order_by(Message.created_at.desc())
+        .limit(10)
+    )
+    history_msgs = list(history_rows.scalars().all())
+    conversation_history = [
+        {"role": m.role, "content": m.content}
+        for m in reversed(history_msgs)
+        if m.role in ("user", "assistant") and m.content
+    ]
+
     user_msg = Message(
         session_id=chat_session.id,
         role="user",
@@ -146,6 +163,7 @@ async def post_chat(
             "active_connection_id": payload.active_connection_id,
             "resolved_workspace_id": workspace_id,
             "resolved_connection_id": payload.active_connection_id,
+            "conversation_history": conversation_history,
         }
 
         yield _sse(

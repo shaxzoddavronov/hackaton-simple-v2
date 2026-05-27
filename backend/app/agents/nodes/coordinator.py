@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
@@ -17,6 +18,15 @@ log = logging.getLogger(__name__)
 _SYSTEM_BASE = (
     "You are the routing brain of QueryMind, an NL-to-SQL assistant. "
     "Classify each user message into EXACTLY ONE intent.\n\n"
+    "IMPORTANT — follow-up handling:\n"
+    "If conversation_history is supplied, treat the new message as a "
+    "POSSIBLE follow-up. Short phrases like 'show as chart', "
+    "'grafik korinishda korsat', 'more detail', 'aniq qilib ber', "
+    "'and broken down by X' are NOT new questions — they refer back to "
+    "the immediately previous user/assistant pair. In that case classify "
+    "based on the previous user's INTENT (typically data_query / "
+    "dashboard), not the new short phrase. The planner will receive the "
+    "same history and merge the request into one SQL.\n\n"
     "Definitions:\n"
     "- chitchat: greetings, capability questions, off-topic small talk. "
     "Examples: 'hi', 'what can you do?'\n"
@@ -88,12 +98,25 @@ async def run(state: GraphState) -> GraphState:
     listing = await _connection_listing(state.get("resolved_workspace_id"))
     system_prompt = _SYSTEM_BASE + listing
 
+    # Carry conversation history so the classifier can resolve
+    # follow-ups against the previous turn.
+    history = state.get("conversation_history") or []
+    messages: list[dict[str, Any]] = [
+        {"role": "system", "content": system_prompt}
+    ]
+    # Send only the last 6 turns to keep the prompt tight — the
+    # IntentDecision schema is small, so more history rarely helps.
+    for h in history[-6:]:
+        role = h.get("role", "user")
+        content = h.get("content", "")
+        if role not in ("user", "assistant") or not content:
+            continue
+        messages.append({"role": role, "content": content})
+    messages.append({"role": "user", "content": msg})
+
     llm = get_llm()
     decision = await llm.structured(
-        [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": msg},
-        ],
+        messages,
         IntentDecision,
     )
     out: GraphState = {

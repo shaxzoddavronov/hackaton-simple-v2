@@ -214,6 +214,74 @@ def test_flatten_properties_handles_nested_objects() -> None:
     assert "address.zip" in names
 
 
+def test_flatten_aggregations_date_histogram_marks_timestamp() -> None:
+    """date_histogram buckets carry ISO ``key_as_string`` values. The
+    chart_designer needs the key column dtype to be ``timestamp`` so
+    it picks LineChart over a fallback table for trend questions."""
+    aggs = {
+        "revenue_trend": {
+            "buckets": [
+                {
+                    "key": 1704067200000,
+                    "key_as_string": "2024-01-01T00:00:00.000Z",
+                    "doc_count": 463,
+                    "total_revenue": {"value": 577568689.88},
+                },
+                {
+                    "key": 1706745600000,
+                    "key_as_string": "2024-02-01T00:00:00.000Z",
+                    "doc_count": 505,
+                    "total_revenue": {"value": 758031452.0},
+                },
+            ]
+        }
+    }
+    cols, dtypes, rows = _flatten_aggregations(aggs)
+    assert cols == ["revenue_trend", "doc_count", "total_revenue"]
+    # Critical: the key dtype is timestamp, not string. Without this
+    # chart_designer falls back to a TableSpec for trends.
+    assert dtypes[0] == "timestamp"
+    assert dtypes[1] == "bigint"
+    assert rows[0][0] == "2024-01-01T00:00:00.000Z"
+    assert rows[0][2] == 577568689.88
+
+
+def test_flatten_aggregations_terms_keeps_string() -> None:
+    """Non-date bucket keys (terms agg on a keyword field) stay as
+    'string' so they don't accidentally trigger time-series rendering."""
+    aggs = {
+        "by_region": {
+            "buckets": [
+                {"key": "EMEA", "doc_count": 12},
+                {"key": "APAC", "doc_count": 7},
+            ]
+        }
+    }
+    _cols, dtypes, _rows = _flatten_aggregations(aggs)
+    assert dtypes[0] == "string"
+
+
+def test_flatten_aggregations_unwraps_doc_count_sub_agg() -> None:
+    """Regression: when the planner writes ``aggs.doc_count.value_count``
+    by accident, every bucket's ``doc_count`` field is ``{"value": N}``
+    instead of an integer. ``_flatten_aggregations`` used to forward the
+    dict into the row, which leaked into BarSpec.data as ``{value: 0}``
+    and crashed the frontend. The unwrap now happens at the source."""
+    aggs = {
+        "by_department": {
+            "buckets": [
+                {"key": "support", "doc_count": {"value": 0}},
+                {"key": "sales", "doc_count": {"value": 7}},
+            ]
+        }
+    }
+    cols, _dtypes, rows = _flatten_aggregations(aggs)
+    assert cols[:2] == ["by_department", "doc_count"]
+    # Cells are now scalars, not dicts.
+    assert rows[0][1] == 0
+    assert rows[1][1] == 7
+
+
 def test_flatten_aggregations_metric_only() -> None:
     # A top-level metric (e.g., value_count, sum) without buckets.
     cols, _dtypes, rows = _flatten_aggregations(

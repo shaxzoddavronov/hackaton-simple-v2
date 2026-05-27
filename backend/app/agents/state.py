@@ -21,6 +21,14 @@ class GraphState(TypedDict, total=False):
     active_workspace_id: UUID | None  # workspace dropdown selection
     active_connection_id: UUID | None  # connection dropdown selection
 
+    # Most recent N turns of this chat session, oldest first. Each item
+    # is ``{"role": "user"|"assistant", "content": str}``. Coordinator
+    # uses it to resolve follow-up references ("show as chart" → re-
+    # visualize the previous turn). The planner consumes it for
+    # multi-turn refinements. The answer writer uses it to match the
+    # user's language.
+    conversation_history: list[dict[str, str]]
+
     # Coordinator outputs
     resolved_workspace_id: UUID | None
     resolved_connection_id: UUID | None  # which DB to actually query

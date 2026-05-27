@@ -104,6 +104,60 @@ def test_many_columns_falls_back_to_table() -> None:
     assert len(spec.columns) == 4
 
 
+def test_single_row_with_dict_cell_coerces_to_string() -> None:
+    """Regression: a JSONB cell that slipped through dtype detection as
+    numeric (or whose dtype was misclassified) used to land in
+    ``KPI.value`` as a dict, which then crashed React with
+    "Objects are not valid as a React child". The KPI now stores a
+    JSON-encoded string instead."""
+    # Numeric dtype but the cell is actually a dict (e.g., Postgres
+    # JSONB column wrongly typed). _coerce_to_primitive must catch it.
+    spec = _pick_spec(
+        _rs(
+            ["score"],
+            ["numeric"],
+            [[{"value": 0.85}]],
+        ),
+        "what is the score",
+    )
+    assert spec.type == "kpi"
+    # Dict gets JSON-stringified — never reaches the frontend as an object.
+    assert isinstance(spec.value, str)
+    assert "0.85" in spec.value
+
+
+def test_single_row_with_decimal_cell_becomes_float() -> None:
+    from decimal import Decimal
+
+    spec = _pick_spec(
+        _rs(["amount"], ["numeric"], [[Decimal("1234.56")]]),
+        "amount",
+    )
+    assert spec.type == "kpi"
+    assert isinstance(spec.value, float)
+    assert spec.value == 1234.56
+
+
+def test_single_row_with_dict_label_stringifies() -> None:
+    """A composite-type column (asyncpg Record / Postgres ROW(...))
+    landing in the label slot used to put the dict directly into the
+    KPI label, which React then refused to render. After coercion it
+    becomes a string."""
+    spec = _pick_spec(
+        _rs(
+            ["meta", "count"],
+            ["json", "int"],
+            [[{"region": "EMEA"}, 42]],
+        ),
+        "events",
+    )
+    assert spec.type == "kpi"
+    assert spec.value == 42
+    # Whole label is a string — never carries an embedded object.
+    assert isinstance(spec.label, str)
+    assert "EMEA" in spec.label
+
+
 def test_leaderboard_with_extras_picks_table() -> None:
     # When planner returns multiple numeric columns alongside the name,
     # bar isn't a good fit — fall back to table so all metrics show.
