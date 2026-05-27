@@ -35,6 +35,13 @@ class Settings(BaseSettings):
     # --- Broker / cache ----------------------------------------------------------
     REDIS_URL: str = Field(default="redis://localhost:6379/0")
 
+    # --- Rate limiting ----------------------------------------------------------
+    # slowapi storage URI. Defaults to the same Redis instance used by
+    # Celery so we don't need a separate broker. Falls back to in-memory
+    # (no cross-process limit) if the URL is ``memory://``. Note db=1 so
+    # rate-limit counters never collide with Celery's task queues on db=0.
+    RATE_LIMIT_STORAGE_URL: str = Field(default="redis://localhost:6379/1")
+
     # --- Environment ------------------------------------------------------------
     # Set QM_ENVIRONMENT=production in deployments. The lifespan hook in
     # main.py fail-fasts on insecure defaults (JWT_SECRET / QM_MASTER_KEY)

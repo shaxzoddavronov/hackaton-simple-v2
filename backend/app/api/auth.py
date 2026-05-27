@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr
@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import create_access_token
 from app.db.models import User
 from app.db.session import get_db
+from app.limiter import limiter
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -37,7 +38,9 @@ class UserOut(BaseModel):
     response_model=UserOut,
     status_code=status.HTTP_201_CREATED,
 )
+@limiter.limit("5/minute")
 async def register(
+    request: Request,  # slowapi requires Request as the first positional arg
     payload: RegisterRequest,
     session: AsyncSession = Depends(get_db),
 ) -> UserOut:
@@ -61,7 +64,9 @@ async def register(
 
 
 @router.post("/login", response_model=TokenResponse)
+@limiter.limit("5/minute")
 async def login(
+    request: Request,  # slowapi requires Request as the first positional arg
     form: OAuth2PasswordRequestForm = Depends(),
     session: AsyncSession = Depends(get_db),
 ) -> TokenResponse:

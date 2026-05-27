@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Any, AsyncIterator
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
@@ -15,6 +16,12 @@ from app.agents.graph import get_graph
 from app.api.deps import get_current_user
 from app.db.models import ChatSession, Message, QueryHistory, User, Workspace
 from app.db.session import get_db
+from app.limiter import limiter
+from app.metrics import (
+    chat_duration_seconds,
+    chat_turns_total,
+    query_history_total,
+)
 from app.services.workspace_resolver import (
     Ambiguous,
     Conflict,
@@ -113,7 +120,9 @@ async def _ensure_session(
 
 
 @router.post("")
+@limiter.limit("10/minute")
 async def post_chat(
+    request: Request,  # slowapi requires Request as the first positional arg
     payload: ChatRequest,
     session: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -184,108 +193,136 @@ async def post_chat(
         log.info("[%s] chat.stream START session=%s workspace=%s connection=%s",
                  trace, chat_session.id, workspace_id, payload.active_connection_id)
 
-        graph = get_graph()
-        graph_input = {
-            "user_id": current_user.id,
-            "session_id": chat_session.id,
-            "user_message": payload.message,
-            "active_workspace_id": payload.active_workspace_id,
-            "active_connection_id": payload.active_connection_id,
-            "resolved_workspace_id": workspace_id,
-            "resolved_connection_id": payload.active_connection_id,
-            "conversation_history": conversation_history,
-        }
-
-        yield _sse(
-            "session",
-            {
-                "session_id": str(chat_session.id),
-                "workspace_id": str(workspace_id) if workspace_id else None,
-                "connection_id": (
-                    str(payload.active_connection_id)
-                    if payload.active_connection_id
-                    else None
-                ),
-            },
-        )
-
+        # Metric bookkeeping: wall-clock start + a label we flip in the
+        # except block. ``final_state`` is defined here so the ``finally``
+        # below can read the resolved intent regardless of which branch
+        # ran.
+        _t0 = time.perf_counter()
+        status_label = "ok"
         final_state: dict[str, Any] = {}
+
         try:
-            async for event in graph.astream(graph_input):
-                # `event` is {node_name: state_delta}
-                for node_name, delta in event.items():
-                    log.info("[%s] node=%s", trace, node_name)
-                    yield _sse("node", {"node": node_name})
-                    if isinstance(delta, dict):
-                        for k, v in delta.items():
-                            final_state[k] = v
-        except Exception as exc:
-            log.exception("[%s] graph invocation failed", trace)
+            graph = get_graph()
+            graph_input = {
+                "user_id": current_user.id,
+                "session_id": chat_session.id,
+                "user_message": payload.message,
+                "active_workspace_id": payload.active_workspace_id,
+                "active_connection_id": payload.active_connection_id,
+                "resolved_workspace_id": workspace_id,
+                "resolved_connection_id": payload.active_connection_id,
+                "conversation_history": conversation_history,
+            }
+
             yield _sse(
-                "error",
-                {"message": _sanitize_error_for_client(exc, trace)},
+                "session",
+                {
+                    "session_id": str(chat_session.id),
+                    "workspace_id": str(workspace_id) if workspace_id else None,
+                    "connection_id": (
+                        str(payload.active_connection_id)
+                        if payload.active_connection_id
+                        else None
+                    ),
+                },
             )
-            return
 
-        ui_spec = final_state.get("ui_spec")
-        sql_executed = final_state.get("sql_executed")
-        log.info(
-            "[%s] graph done. ui_spec_type=%s sql_executed_len=%s has_plan=%s",
-            trace,
-            getattr(ui_spec, "type", None),
-            len(sql_executed) if sql_executed else 0,
-            final_state.get("plan") is not None,
-        )
-
-        # Persist the assistant turn + audit row.
-        assistant_msg = Message(
-            session_id=chat_session.id,
-            role="assistant",
-            content=_extract_body(ui_spec),
-            ui_spec=ui_spec.model_dump(mode="json") if ui_spec is not None else None,
-        )
-        log.info("[%s] persist: session.add(assistant_msg)", trace)
-        session.add(assistant_msg)
-        log.info("[%s] persist: session.flush()", trace)
-        await session.flush()
-        if sql_executed:
-            rs = final_state.get("result")
-            plan = final_state.get("plan")
-            audit_dialect = plan.dialect if plan is not None else "postgres"
-            log.info(
-                "[%s] persist: QueryHistory(dialect=%s, status=%s)",
-                trace,
-                audit_dialect,
-                "ok" if rs is not None else "executor_error",
-            )
-            session.add(
-                QueryHistory(
-                    message_id=assistant_msg.id,
-                    sql_text=sql_executed,
-                    dialect=audit_dialect,
-                    took_ms=rs.took_ms if rs is not None else None,
-                    row_count=rs.row_count if rs is not None else None,
-                    status="ok" if rs is not None else "executor_error",
+            try:
+                async for event in graph.astream(graph_input):
+                    # `event` is {node_name: state_delta}
+                    for node_name, delta in event.items():
+                        log.info("[%s] node=%s", trace, node_name)
+                        yield _sse("node", {"node": node_name})
+                        if isinstance(delta, dict):
+                            for k, v in delta.items():
+                                final_state[k] = v
+            except Exception as exc:
+                log.exception("[%s] graph invocation failed", trace)
+                status_label = "error"
+                yield _sse(
+                    "error",
+                    {"message": _sanitize_error_for_client(exc, trace)},
                 )
-            )
-        log.info("[%s] persist: session.commit()", trace)
-        await session.commit()
-        log.info("[%s] persist OK assistant_msg=%s", trace, assistant_msg.id)
+                return
 
-        # Federation transparency: include the per-sub-query breakdown so
-        # the UI can show "Queried: pg-quiz · 12 rows, es-search · 30 rows"
-        # above the chart. Empty / missing on single-DB turns.
-        sub_results = final_state.get("sub_results") or {}
-        yield _sse(
-            "final",
-            {
-                "ui_spec": ui_spec.model_dump(mode="json") if ui_spec is not None else None,
-                "sql": sql_executed,
-                "assistant_message_id": str(assistant_msg.id),
-                "sub_results": sub_results,
-            },
-        )
-        log.info("[%s] chat.stream END", trace)
+            ui_spec = final_state.get("ui_spec")
+            sql_executed = final_state.get("sql_executed")
+            log.info(
+                "[%s] graph done. ui_spec_type=%s sql_executed_len=%s has_plan=%s",
+                trace,
+                getattr(ui_spec, "type", None),
+                len(sql_executed) if sql_executed else 0,
+                final_state.get("plan") is not None,
+            )
+
+            # Persist the assistant turn + audit row.
+            assistant_msg = Message(
+                session_id=chat_session.id,
+                role="assistant",
+                content=_extract_body(ui_spec),
+                ui_spec=ui_spec.model_dump(mode="json") if ui_spec is not None else None,
+            )
+            log.info("[%s] persist: session.add(assistant_msg)", trace)
+            session.add(assistant_msg)
+            log.info("[%s] persist: session.flush()", trace)
+            await session.flush()
+            if sql_executed:
+                rs = final_state.get("result")
+                plan = final_state.get("plan")
+                audit_dialect = plan.dialect if plan is not None else "postgres"
+                audit_status = "ok" if rs is not None else "executor_error"
+                log.info(
+                    "[%s] persist: QueryHistory(dialect=%s, status=%s)",
+                    trace,
+                    audit_dialect,
+                    audit_status,
+                )
+                session.add(
+                    QueryHistory(
+                        message_id=assistant_msg.id,
+                        sql_text=sql_executed,
+                        dialect=audit_dialect,
+                        took_ms=rs.took_ms if rs is not None else None,
+                        row_count=rs.row_count if rs is not None else None,
+                        status=audit_status,
+                    )
+                )
+                # Cardinality note: ``dialect`` is the small enum from the
+                # engine registry (postgres/sqlite/mysql/clickhouse/...);
+                # ``status`` is the same finite set we persist. Safe.
+                query_history_total.labels(
+                    dialect=audit_dialect,
+                    status=audit_status,
+                ).inc()
+            log.info("[%s] persist: session.commit()", trace)
+            await session.commit()
+            log.info("[%s] persist OK assistant_msg=%s", trace, assistant_msg.id)
+
+            # Federation transparency: include the per-sub-query breakdown so
+            # the UI can show "Queried: pg-quiz · 12 rows, es-search · 30 rows"
+            # above the chart. Empty / missing on single-DB turns.
+            sub_results = final_state.get("sub_results") or {}
+            yield _sse(
+                "final",
+                {
+                    "ui_spec": ui_spec.model_dump(mode="json") if ui_spec is not None else None,
+                    "sql": sql_executed,
+                    "assistant_message_id": str(assistant_msg.id),
+                    "sub_results": sub_results,
+                },
+            )
+            log.info("[%s] chat.stream END", trace)
+        finally:
+            # Always emit chat-turn metrics — happy path, agent-error path,
+            # AND client-disconnect path (StreamingResponse closes the
+            # generator). ``intent`` may be missing if we crashed before
+            # the coordinator ran; bucket as "unknown" so the label is
+            # bounded.
+            chat_turns_total.labels(
+                intent=str(final_state.get("intent") or "unknown"),
+                status=status_label,
+            ).inc()
+            chat_duration_seconds.observe(time.perf_counter() - _t0)
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 

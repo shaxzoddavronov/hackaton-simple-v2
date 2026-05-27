@@ -13,6 +13,10 @@ from contextlib import asynccontextmanager
 import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_fastapi_instrumentator import Instrumentator
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 # Make our INFO logs visible in the uvicorn console. uvicorn ships with
 # its own handler on the root logger; we just need to ensure our level
@@ -37,6 +41,7 @@ from app.api import (
 from app.config import settings
 from app.db.session import engine
 from app.engines import register_all as register_engines
+from app.limiter import limiter
 
 # Eagerly register concrete engine adapters so `get_engine(workspace)` works
 # from the first request — kept out of `app.engines.__init__` to avoid a
@@ -129,6 +134,14 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Rate limiting wiring. slowapi requires (a) the limiter stashed on
+    # ``app.state`` so its middleware can find it, (b) an exception
+    # handler that converts ``RateLimitExceeded`` to a JSON 429, and (c)
+    # ``SlowAPIMiddleware`` registered so the per-route decorators run.
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_middleware(SlowAPIMiddleware)
+
     # Allowed origins come from Settings.CORS_ORIGINS so dev (:3001) and
     # any prod host can both work without code edits. NOTE: when
     # ``allow_credentials=True`` you MUST list explicit origins —
@@ -152,6 +165,20 @@ def create_app() -> FastAPI:
     app.include_router(schema.router)
     app.include_router(settings_router.router)
     app.include_router(documents.router)
+
+    # Default HTTP histograms + counters under /metrics. ``instrument()``
+    # wraps every handler registered so far; ``expose()`` mounts the
+    # ``/metrics`` route. Called AFTER ``include_router`` so every
+    # endpoint is picked up. ``/metrics`` is hidden from OpenAPI (internal
+    # scraper use) and carries no auth — Prometheus scrapers can't pass
+    # JWT. Both calls return the instrumentator for chaining; we don't
+    # retain the handle.
+    Instrumentator(
+        should_group_status_codes=True,
+        should_ignore_untemplated=True,
+        should_respect_env_var=False,
+        excluded_handlers=["/healthz", "/metrics", "/openapi.json", "/docs", "/redoc"],
+    ).instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
 
     @app.get("/healthz", tags=["health"], include_in_schema=False)
     async def healthz() -> dict[str, str]:

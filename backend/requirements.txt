@@ -5,6 +5,10 @@
 fastapi
 uvicorn[standard]
 python-multipart
+prometheus-fastapi-instrumentator>=7.0
+prometheus-client>=0.20
+# Redis-backed rate limiting middleware.
+slowapi>=0.1.9
 
 # ORM + drivers
 sqlalchemy[asyncio]>=2.0

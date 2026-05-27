@@ -206,7 +206,7 @@ _MONGO_SYSTEM = (
     "    'uch oylik' / 'last 3 months' →\n"
     '       {"$match":{"<date_field>":{"$gte":{"$date":"<ISO 3 months ago>"}}}}\n'
     "    'shu oy' / 'this month' →\n"
-    '       {"$match":{"<date_field>":{"$gte":{"$date":"<start of month ISO>"}}}}\n"
+    '       {"$match":{"<date_field>":{"$gte":{"$date":"<start of month ISO>"}}}}\n'
     "  Pick the most plausible date field from the schema (created_at, "
     "createdAt, timestamp, etc.). If the user gave NO time hint, omit "
     "the filter.\n"
