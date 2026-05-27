@@ -30,6 +30,16 @@ const DIALECTS: { value: Dialect; label: string; supported: boolean }[] = [
   { value: "elasticsearch", label: "Elasticsearch", supported: true },
   { value: "duckdb", label: "DuckDB", supported: true },
   { value: "mssql", label: "SQL Server", supported: true },
+  { value: "rest_api", label: "REST API / CRM / 1C", supported: true },
+];
+
+const REST_PRESETS: { value: string; label: string }[] = [
+  { value: "generic", label: "Generic (no preset)" },
+  { value: "bitrix24", label: "Bitrix24 CRM" },
+  { value: "amocrm", label: "AmoCRM v4" },
+  { value: "odata_1c", label: "1C OData" },
+  { value: "hubspot", label: "HubSpot CRM v3" },
+  { value: "salesforce", label: "Salesforce REST" },
 ];
 
 const STATUS_TINT: Record<string, string> = {
@@ -242,6 +252,26 @@ function AddConnectionPanel({
   const [mongoAuth, setMongoAuth] = useState<"none" | "password">("none");
   const [mongoTls, setMongoTls] = useState(false);
   const [mongoReplicaSet, setMongoReplicaSet] = useState("");
+  // REST API specific
+  const [apiBaseUrl, setApiBaseUrl] = useState("https://");
+  const [apiSpecSource, setApiSpecSource] = useState<
+    "preset" | "openapi_url" | "openapi_file" | "none"
+  >("preset");
+  const [apiPreset, setApiPreset] = useState("generic");
+  const [apiSpecUrl, setApiSpecUrl] = useState("");
+  const [apiSpecB64, setApiSpecB64] = useState("");
+  const [apiAuthKind, setApiAuthKind] = useState<
+    "bearer" | "api_key" | "basic" | "oauth2_client" | "none"
+  >("bearer");
+  const [apiToken, setApiToken] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [apiKeyLocation, setApiKeyLocation] = useState<"header" | "query">("header");
+  const [apiKeyName, setApiKeyName] = useState("X-API-Key");
+  const [apiClientId, setApiClientId] = useState("");
+  const [apiClientSecret, setApiClientSecret] = useState("");
+  const [apiTokenUrl, setApiTokenUrl] = useState("");
+  const [apiScope, setApiScope] = useState("");
+  const [apiTimeoutS, setApiTimeoutS] = useState("30");
   const toast = useToast();
   const [testing, setTesting] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -398,6 +428,43 @@ function AddConnectionPanel({
         connection_meta: meta,
         credentials: creds,
         auth_kind: mongoAuth === "password" ? "password" : "none",
+      } as const;
+    }
+    if (dialect === "rest_api") {
+      const meta: Record<string, unknown> = {
+        base_url: apiBaseUrl.replace(/\/$/, ""),
+        spec_source: apiSpecSource,
+        timeout_s: Number(apiTimeoutS) || 30,
+      };
+      if (apiSpecSource === "preset") {
+        meta.preset = apiPreset;
+      } else if (apiSpecSource === "openapi_url") {
+        meta.spec_url = apiSpecUrl;
+      } else if (apiSpecSource === "openapi_file" && apiSpecB64) {
+        meta.spec_content_b64 = apiSpecB64;
+      }
+      const credentials: Record<string, string> = {};
+      if (apiAuthKind === "bearer") {
+        credentials.token = apiToken;
+      } else if (apiAuthKind === "api_key") {
+        credentials.key = apiKey;
+        credentials.key_location = apiKeyLocation;
+        credentials.key_name = apiKeyName;
+      } else if (apiAuthKind === "basic") {
+        credentials.username = user;
+        credentials.password = password;
+      } else if (apiAuthKind === "oauth2_client") {
+        credentials.client_id = apiClientId;
+        credentials.client_secret = apiClientSecret;
+        credentials.token_url = apiTokenUrl;
+        if (apiScope) credentials.scope = apiScope;
+      }
+      return {
+        name,
+        dialect,
+        connection_meta: meta,
+        credentials,
+        auth_kind: apiAuthKind,
       } as const;
     }
     // Fallback — should not be reachable now that every dialect is supported.
@@ -904,6 +971,308 @@ function AddConnectionPanel({
                 onChange={(e) => setMongoTls(e.target.checked)}
               />
               Use TLS
+            </label>
+          </>
+        ) : dialect === "rest_api" ? (
+          <>
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                Base URL
+              </span>
+              <input
+                required
+                value={apiBaseUrl}
+                onChange={(e) => setApiBaseUrl(e.target.value)}
+                placeholder="https://api.example.com"
+                className="w-full input"
+              />
+            </label>
+
+            <div className="space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                Spec source
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    { v: "preset", label: "Preset (CRM/ERP)" },
+                    { v: "openapi_url", label: "OpenAPI URL" },
+                    { v: "openapi_file", label: "Upload spec" },
+                    { v: "none", label: "Custom (no spec)" },
+                  ] as const
+                ).map((m) => (
+                  <button
+                    key={m.v}
+                    type="button"
+                    onClick={() => setApiSpecSource(m.v)}
+                    className={
+                      "px-3 py-1.5 rounded-xl text-sm " +
+                      (apiSpecSource === m.v
+                        ? "bg-primary-container/30 text-primary"
+                        : "bg-surface-container-high/40 text-on-surface-variant")
+                    }
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {apiSpecSource === "preset" ? (
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  Preset
+                </span>
+                <select
+                  value={apiPreset}
+                  onChange={(e) => setApiPreset(e.target.value)}
+                  className="w-full input"
+                >
+                  {REST_PRESETS.map((p) => (
+                    <option key={p.value} value={p.value}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+
+            {apiSpecSource === "openapi_url" ? (
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  OpenAPI spec URL
+                </span>
+                <input
+                  required
+                  value={apiSpecUrl}
+                  onChange={(e) => setApiSpecUrl(e.target.value)}
+                  placeholder="https://api.example.com/openapi.json"
+                  className="w-full input"
+                />
+              </label>
+            ) : null}
+
+            {apiSpecSource === "openapi_file" ? (
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  Upload OpenAPI JSON
+                </span>
+                <input
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={async (e) => {
+                    const f = e.target.files?.[0];
+                    if (!f) {
+                      setApiSpecB64("");
+                      return;
+                    }
+                    const buf = await f.arrayBuffer();
+                    const bytes = new Uint8Array(buf);
+                    let s = "";
+                    for (let i = 0; i < bytes.length; i++) {
+                      s += String.fromCharCode(bytes[i] as number);
+                    }
+                    setApiSpecB64(btoa(s));
+                  }}
+                  className="w-full input"
+                />
+                {apiSpecB64 ? (
+                  <span className="text-xs text-tertiary">
+                    Loaded ({Math.round((apiSpecB64.length * 3) / 4)} bytes)
+                  </span>
+                ) : null}
+              </label>
+            ) : null}
+
+            <div className="space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                Authentication
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    { v: "bearer", label: "Bearer token" },
+                    { v: "api_key", label: "API key" },
+                    { v: "basic", label: "Basic auth" },
+                    { v: "oauth2_client", label: "OAuth2 client" },
+                    { v: "none", label: "None" },
+                  ] as const
+                ).map((m) => (
+                  <button
+                    key={m.v}
+                    type="button"
+                    onClick={() => setApiAuthKind(m.v)}
+                    className={
+                      "px-3 py-1.5 rounded-xl text-sm " +
+                      (apiAuthKind === m.v
+                        ? "bg-primary-container/30 text-primary"
+                        : "bg-surface-container-high/40 text-on-surface-variant")
+                    }
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {apiAuthKind === "bearer" ? (
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  Bearer token
+                </span>
+                <input
+                  required
+                  type="password"
+                  value={apiToken}
+                  onChange={(e) => setApiToken(e.target.value)}
+                  className="w-full input"
+                />
+              </label>
+            ) : null}
+
+            {apiAuthKind === "api_key" ? (
+              <>
+                <label className="block space-y-1">
+                  <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                    API key value
+                  </span>
+                  <input
+                    required
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    className="w-full input"
+                  />
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block space-y-1">
+                    <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                      Location
+                    </span>
+                    <select
+                      value={apiKeyLocation}
+                      onChange={(e) =>
+                        setApiKeyLocation(e.target.value as "header" | "query")
+                      }
+                      className="w-full input"
+                    >
+                      <option value="header">Header</option>
+                      <option value="query">Query param</option>
+                    </select>
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                      Param/header name
+                    </span>
+                    <input
+                      required
+                      value={apiKeyName}
+                      onChange={(e) => setApiKeyName(e.target.value)}
+                      className="w-full input"
+                    />
+                  </label>
+                </div>
+              </>
+            ) : null}
+
+            {apiAuthKind === "basic" ? (
+              <>
+                <label className="block space-y-1">
+                  <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                    Username
+                  </span>
+                  <input
+                    required
+                    value={user}
+                    onChange={(e) => setUser(e.target.value)}
+                    className="w-full input"
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                    Password
+                  </span>
+                  <input
+                    required
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full input"
+                  />
+                </label>
+              </>
+            ) : null}
+
+            {apiAuthKind === "oauth2_client" ? (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block space-y-1">
+                    <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                      Client ID
+                    </span>
+                    <input
+                      required
+                      value={apiClientId}
+                      onChange={(e) => setApiClientId(e.target.value)}
+                      className="w-full input"
+                    />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                      Client secret
+                    </span>
+                    <input
+                      required
+                      type="password"
+                      value={apiClientSecret}
+                      onChange={(e) => setApiClientSecret(e.target.value)}
+                      className="w-full input"
+                    />
+                  </label>
+                </div>
+                <label className="block space-y-1">
+                  <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                    Token URL
+                  </span>
+                  <input
+                    required
+                    value={apiTokenUrl}
+                    onChange={(e) => setApiTokenUrl(e.target.value)}
+                    placeholder="https://login.example.com/oauth2/token"
+                    className="w-full input"
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                    Scope (optional)
+                  </span>
+                  <input
+                    value={apiScope}
+                    onChange={(e) => setApiScope(e.target.value)}
+                    className="w-full input"
+                  />
+                </label>
+              </>
+            ) : null}
+
+            {apiAuthKind === "none" ? (
+              <div className="rounded-xl border border-outline/20 bg-surface-container-high/40 px-3 py-2 text-on-surface-variant text-xs">
+                Public API — no credentials sent.
+              </div>
+            ) : null}
+
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                Request timeout (seconds)
+              </span>
+              <input
+                type="number"
+                min={1}
+                max={300}
+                value={apiTimeoutS}
+                onChange={(e) => setApiTimeoutS(e.target.value)}
+                className="w-full input"
+              />
             </label>
           </>
         ) : null}

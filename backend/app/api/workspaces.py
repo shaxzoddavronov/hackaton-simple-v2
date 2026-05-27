@@ -47,7 +47,16 @@ _CONNECTION_TEST_TIMEOUT_S = 8.0
 
 _DIALECTS = Literal[
     "postgres", "sqlite", "mysql", "clickhouse", "oracle",
-    "mongodb", "elasticsearch",
+    "mongodb", "elasticsearch", "duckdb", "mssql", "rest_api",
+]
+
+# auth_kind covers DB engines (password/dsn/iam/none) AND the REST API
+# engine's expanded scheme list. Keeping it as one Literal across both
+# endpoints means the frontend can use a single union type. Backwards
+# compat: "password" still maps to user+password for DB engines.
+_AUTH_KINDS = Literal[
+    "password", "dsn", "iam", "none",
+    "bearer", "api_key", "basic", "oauth2_client",
 ]
 
 
@@ -74,7 +83,7 @@ class ConnectionCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     dialect: _DIALECTS
     connection_meta: dict[str, Any] = Field(default_factory=dict)
-    auth_kind: Literal["password", "dsn", "iam", "none"] = "password"
+    auth_kind: _AUTH_KINDS = "password"
     credentials: dict[str, str] = Field(default_factory=dict)
 
 
@@ -91,7 +100,7 @@ class TestConnectionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     dialect: _DIALECTS
     connection_meta: dict[str, Any] = Field(default_factory=dict)
-    auth_kind: Literal["password", "dsn", "iam", "none"] = "password"
+    auth_kind: _AUTH_KINDS = "password"
     credentials: dict[str, str] = Field(default_factory=dict)
 
 

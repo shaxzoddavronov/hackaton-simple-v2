@@ -12,6 +12,9 @@ SqlDialect = Literal[
 # engines will be plugged in via the same registry but speak different
 # query languages — readonly_validator does not apply to them.
 NoSqlDialect = Literal["mongodb", "elasticsearch"]
+# REST-style data sources (CRM / ERP / 1C / OpenAPI). Speak a JSON
+# envelope and are validated by services.api_query_validator.
+ApiDialect = Literal["rest_api"]
 Dialect = Literal[
     "postgres",
     "sqlite",
@@ -22,6 +25,7 @@ Dialect = Literal[
     "elasticsearch",
     "duckdb",
     "mssql",
+    "rest_api",
 ]
 
 

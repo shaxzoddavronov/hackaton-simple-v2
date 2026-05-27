@@ -45,12 +45,18 @@ class SqlPlan(BaseModel):
         "elasticsearch",
         "duckdb",
         "mssql",
+        "mongodb",
+        "rest_api",
     ]
     sql: str = Field(
         description=(
             "For SQL dialects: a single read-only SELECT. "
-            "For elasticsearch: a JSON envelope string "
-            '{"index":"...","body":{...}}.'
+            "For elasticsearch: a JSON envelope "
+            '{"index":"...","body":{...}}. '
+            "For mongodb: a JSON envelope "
+            '{"database":"...","collection":"...","pipeline":[...]}. '
+            "For rest_api: a JSON envelope "
+            '{"endpoint":"/path","method":"GET","query_params":{...},...}.'
         )
     )
     rationale: str = Field(
@@ -77,12 +83,17 @@ class SubQuery(BaseModel):
     dialect: Literal[
         "postgres", "sqlite", "mysql", "clickhouse",
         "oracle", "elasticsearch", "duckdb", "mssql",
+        "mongodb", "rest_api",
     ]
     query: str = Field(
         description=(
             "For SQL dialects: a single read-only SELECT. "
-            "For elasticsearch: the JSON envelope string "
-            '{"index":"...","body":{...}}.'
+            "For elasticsearch: a JSON envelope "
+            '{"index":"...","body":{...}}. '
+            "For mongodb: a JSON envelope "
+            '{"database":"...","collection":"...","pipeline":[...]}. '
+            "For rest_api: a JSON envelope "
+            '{"endpoint":"/path","method":"GET","query_params":{...},...}.'
         )
     )
     alias: str = Field(

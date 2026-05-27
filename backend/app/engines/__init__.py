@@ -28,6 +28,7 @@ def register_all() -> None:
     from app.engines import oracle as _oracle  # noqa: F401
     from app.engines import duckdb as _duckdb  # noqa: F401
     from app.engines import mssql as _mssql  # noqa: F401
+    from app.engines import rest_api as _rest_api  # noqa: F401
 
 
 __all__ = ["DIALECT_REGISTRY", "get_engine", "register_all"]

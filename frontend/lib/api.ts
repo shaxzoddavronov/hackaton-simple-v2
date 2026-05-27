@@ -90,13 +90,24 @@ export type Dialect =
   | "mongodb"
   | "elasticsearch"
   | "duckdb"
-  | "mssql";
+  | "mssql"
+  | "rest_api";
+
+export type AuthKind =
+  | "password"
+  | "dsn"
+  | "iam"
+  | "none"
+  | "bearer"
+  | "api_key"
+  | "basic"
+  | "oauth2_client";
 
 export async function testConnection(payload: {
   dialect: Dialect;
   connection_meta: Record<string, unknown>;
   credentials: Record<string, string>;
-  auth_kind: "password" | "dsn" | "iam" | "none";
+  auth_kind: AuthKind;
 }): Promise<TestConnectionResult> {
   return api<TestConnectionResult>("/workspaces/test-connection", {
     method: "POST",
@@ -128,7 +139,7 @@ export async function createConnection(
     dialect: Dialect;
     connection_meta: Record<string, unknown>;
     credentials: Record<string, string>;
-    auth_kind: "password" | "dsn" | "iam" | "none";
+    auth_kind: AuthKind;
   },
 ): Promise<ConnectionSummary> {
   return api<ConnectionSummary>(`/workspaces/${workspace_id}/connections`, {

@@ -233,6 +233,76 @@ _MONGO_SYSTEM = (
     "write the closest meaningful aggregation and explain in the rationale."
 )
 
+_API_SYSTEM = (
+    "You are a REST API query planner for a strict READ-ONLY analytics "
+    "tool. Generate exactly ONE GET request against the API catalog "
+    "below that answers the user's question.\n"
+    "\n"
+    "Output contract — IMPORTANT:\n"
+    "  The `sql` field of your SqlPlan must be a JSON ENVELOPE STRING "
+    "with this shape:\n"
+    '    {"endpoint":"/path","method":"GET",'
+    '"path_params":{},"query_params":{},"headers":{},'
+    '"json_path":"$.data","row_field_paths":{}}\n'
+    "  The `dialect` field must be exactly \"rest_api\". `method` must "
+    "be \"GET\". Because `sql` is a JSON string field, every double "
+    "quote inside your envelope must be backslash-escaped.\n"
+    "\n"
+    "Catalog mapping:\n"
+    "  Each row in the schema below corresponds to ONE callable "
+    "endpoint. The table name is encoded as 'GET <path>'. Columns "
+    "whose data_type starts with 'param:' are query/path parameters "
+    "(name prefixed with '@'); columns without that prefix are fields "
+    "you can expect to find in the response body.\n"
+    "\n"
+    "Rules:\n"
+    "  * GET ONLY. Never set method to POST/PUT/PATCH/DELETE.\n"
+    "  * endpoint MUST exactly match one of the catalog's 'GET <path>' "
+    "rows. For templates like '/users/{id}', fill {id} in path_params; "
+    "do not write the literal '{id}' in the endpoint string.\n"
+    "  * Do NOT invent endpoints, params, or response fields not in the "
+    "schema.\n"
+    "  * Translate the user's question into query_params using the "
+    "param names from the catalog. Common patterns:\n"
+    "      'first 50 X'      → query_params['limit']=50 or "
+    "['$top']=50 (1C OData) or ['start']=0 (Bitrix24).\n"
+    "      'this month'      → use the API's date filter param if one "
+    "exists in the catalog (e.g. filter[created_at][from] in AmoCRM, "
+    "or $filter for OData with ge/le clauses).\n"
+    "      'top N by Y'      → most REST APIs don't sort server-side; "
+    "request a reasonable page size and the answer node will sort.\n"
+    "  * Set json_path if the catalog hints at a wrapper field "
+    "(Bitrix → '$.result', HubSpot → '$.results', OData → '$.value'). "
+    "Otherwise omit — the engine probes common shapes automatically.\n"
+    "\n"
+    "1C OData specifics:\n"
+    "  * Always include query_params['$format']='json' so the engine "
+    "gets JSON not Atom XML.\n"
+    "  * Use $filter with ge/le/eq operators: e.g. "
+    "$filter=Date ge datetime'2026-01-01T00:00:00'.\n"
+    "  * $top caps row count; $skip paginates.\n"
+    "\n"
+    "Bitrix24 specifics:\n"
+    "  * Pagination uses 'start' (0-based row offset, page size 50).\n"
+    "  * Filters use 'filter[FIELD]=VALUE'. Multiple selects use "
+    "select[]=ID&select[]=NAME.\n"
+    "  * Response is wrapped {'result':[...], 'next':50, 'total':123}; "
+    "set json_path='$.result'.\n"
+    "\n"
+    "AmoCRM specifics:\n"
+    "  * Date filters use UNIX seconds: filter[created_at][from]=...\n"
+    "  * Response is wrapped {'_embedded':{'leads':[...]}, '_links':...};"
+    " set json_path='$._embedded.leads' (substitute leads/contacts/etc).\n"
+    "\n"
+    "HubSpot specifics:\n"
+    "  * 'limit' parameter; 'after' for cursor pagination.\n"
+    "  * Response: {'results':[...], 'paging':{...}}; json_path='$.results'.\n"
+    "\n"
+    "Plan ONE request. If the schema can't satisfy the question, pick "
+    "the closest endpoint and explain in the rationale."
+)
+
+
 _MAX_RAG_CHARS = 1800
 
 
@@ -318,6 +388,8 @@ async def run(state: GraphState) -> GraphState:
         system_prompt = _ES_SYSTEM
     elif dialect == "mongodb":
         system_prompt = _MONGO_SYSTEM
+    elif dialect == "rest_api":
+        system_prompt = _API_SYSTEM
     else:
         system_prompt = _SQL_SYSTEM
 
