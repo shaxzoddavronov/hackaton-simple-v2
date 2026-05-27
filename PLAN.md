@@ -455,17 +455,79 @@ SELECT * FROM dblink('...','DROP TABLE x');
 
 ---
 
-## Explicitly Deferred (out of v1)
+## Shipped (post-v1)
 
-- MySQL, MSSQL, MongoDB dialects — `QueryEngine` ABC keeps the slot open; no code to write yet.
-- Multi-replica vLLM with autoscaling — GPU 1 stays hot-standby, single replica handles demo load.
-- Query-result caching — no Redis cache layer for query outputs.
-- Schema-bundle diffing on refresh — re-profile fully on refresh.
-- RBAC beyond per-user isolation — no shared workspaces, no roles.
+This section tracks what landed AFTER the original v1 build order
+above. PLAN.md stays the source of truth; new work edits this list.
+
+* **Phase 1 — Multi-connection workspaces.** A `Workspace` is now a
+  folder holding N `WorkspaceConnection`s, each its own dialect +
+  encrypted creds + schema bundle + RAG chunks. Alembic migration 0003
+  + 0004. UI ships a per-workspace connection list with Test / Add /
+  Re-profile / Delete.
+* **Phase 2 — Elasticsearch engine.** `engines/elasticsearch.py`,
+  `services/es_readonly_validator.py`, JSON envelope `{index, body}`
+  emitted by the planner. Validator hard-rejects `script`, system
+  indices, mutation endpoints. ES client pinned `>=8,<9` for protocol
+  compatibility.
+* **Phase 3 — Federation layer.** `coordinator → multi_schema_loader →
+  federated_planner → federated_executor` path. `FederatedPlan`
+  decomposes a question into N parallel sub-queries plus a merge
+  pipeline (join / union / concat). Pure-Python merge under
+  `services/federation_merge.py` — no pandas dependency. UI shows the
+  per-sub-query breakdown via `FederationBadge`.
+* **Phase 3.1 — Polish.** Per-connection BM25 prune in
+  `federated_planner`; `FEDERATION_MAX_ROWS` cap on the merged
+  ResultSet (default 1000); SSE `final` event carries `sub_results`
+  metadata.
+* **Phase 4 — Dialect adapters.** MySQL (`asyncmy`),
+  ClickHouse (`clickhouse-connect`), MongoDB (`motor` + JSON-pipeline
+  validator under `mongo_readonly_validator.py`), Oracle (`oracledb`
+  thin mode). Seven dialects in the registry; UI form supports all.
+* **Phase 5 — docker-compose dialects + seeds.** Commented-out service
+  blocks for MySQL / ClickHouse / Mongo / Oracle with matching seed
+  scripts mirroring the Postgres `seed_sales` shape. Per-dialect
+  mocked-driver smoke tests under `tests/unit/test_<dialect>_engine.py`.
+* **Phase 6 — Triton bge-m3.** `infra/triton/` ships a Python-backend
+  model serving `BAAI/bge-m3` (1024-d multilingual) on CPU torch.
+  `services/rag/triton_client.py` is the only speaker of the v2
+  inference API; embeddings flow through `indexer.py` into pgvector.
+* **Phase 7 — Production hardening.** `_check_secrets()` fail-fasts
+  when `QM_ENVIRONMENT=production` is set with dev-default JWT or
+  master key. SSE error sanitization (`_sanitize_error_for_client`)
+  strips SQL / connection strings / driver internals out of the
+  user-facing message. `slowapi` rate limits: `/chat` 10/min,
+  `/auth/*` 5/min. Prometheus `/metrics` via
+  `prometheus-fastapi-instrumentator` + custom `qm_*` counters in
+  `metrics.py`. End-to-end `federated_executor` smoke test (mocked
+  engines, parallel fan-out, merge-pipeline correctness).
+* **Phase 8 — Production deploy artifacts.** `infra/k8s/` ships 12
+  bare manifests (namespace, secret template, configmap, postgres
+  StatefulSet, redis, backend, celery worker + beat, frontend,
+  migrations Job, nginx Ingress with SSE-safe annotations, Prometheus
+  ServiceMonitor). `infra/helm/querymind/` is the parameterized chart
+  (`helm lint` clean). `DEPLOY.md` is the prod walkthrough.
+* **Phase 9 — Observability + UX polish.** `qm_llm_calls_total{node,
+  outcome}` wired at every `LLMClient.structured` call (ok / repair /
+  failed). Frontend toast system replaces inline error text for
+  non-recoverable failures.
+
+Tests: 196 unit tests passing as of the last shipped phase.
+
+## Explicitly Deferred (still open)
+
+- MSSQL / Snowflake / BigQuery / DuckDB dialects — slot open in
+  `engines/`, no driver picked.
+- Multi-replica vLLM with autoscaling — single replica handles current
+  load; revisit when sustained QPS justifies the GPU split.
+- Query-result caching — no Redis cache layer for SQL outputs yet.
+- RBAC beyond per-user isolation — no shared workspaces, no roles, no
+  org/team grouping.
 - BYO model fine-tuning / LoRA hot-swap.
 - Scheduled dashboards / email digests.
-- Token-level chat streaming — node-level SSE events are enough for v1.
-- Cross-workspace joins / federation.
+- Token-level chat streaming — node-level SSE events are still enough.
+- Cross-workspace joins (federation works WITHIN a single workspace's
+  connections, not across workspaces).
 
 ---
 
