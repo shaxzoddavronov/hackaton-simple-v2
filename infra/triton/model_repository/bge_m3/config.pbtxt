@@ -12,6 +12,12 @@
 # without an extra batch axis injected on top. Real batching is done
 # CLIENT-side via the existing `RAG_INDEX_BATCH` setting — that keeps
 # the Python backend simple and predictable.
+#
+# Hardware target: NVIDIA L40S (Ada Lovelace, sm_89, 48 GB VRAM).
+# A single bge-m3 in FP16 is ~1.2 GB; with batch=64 the activation
+# budget runs to ~3 GB. We co-locate TWO model instances on the same
+# GPU so concurrent indexing jobs from Celery don't queue (each Triton
+# instance gets its own Python interpreter + its own model copy).
 
 name: "bge_m3"
 backend: "python"
@@ -33,12 +39,26 @@ output [
   }
 ]
 
-# Single CPU instance is enough for hackathon load. Increase `count`
-# to allow parallel requests, or change `kind: KIND_GPU` if you build
-# the image with CUDA torch.
+# Two GPU instances on device 0. L40S has 48 GB; two FP16 instances +
+# activations + cuDNN scratch land around 12 GB total, leaving plenty
+# of room for other co-tenants (e.g., the vLLM that already shares the
+# host GPU in single-node deployments). Bump `count` to 3 if you're
+# running a dedicated embedding host with no co-tenants.
+#
+# To roll back to CPU mode on a non-GPU host: change `kind` to
+# `KIND_CPU` and set `TRITON_FORCE_CPU=1` on the container.
 instance_group [
   {
-    count: 1
-    kind: KIND_CPU
+    count: 2
+    kind: KIND_GPU
+    gpus: [ 0 ]
   }
 ]
+
+# Triton-side optimisations. Disabled by default because the Python
+# backend does its own batching internally via sentence-transformers.
+# Set `dynamic_batching { preferred_batch_size: [32] }` only if you
+# move to ONNX or TensorRT — for the Python path, client-side batching
+# via RAG_INDEX_BATCH is already optimal.
+#
+# parameters [{ key: "FORCE_CPU_ONLY_INPUT_TENSORS", value: { string_value: "no" } }]

@@ -1,0 +1,133 @@
+{{- if .Values.triton.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "querymind.fullname" . }}-triton
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "querymind.labels" . | nindent 4 }}
+    app.kubernetes.io/component: triton
+spec:
+  replicas: {{ .Values.triton.replicaCount }}
+  # Recreate (not RollingUpdate) so in-flight Triton requests drain
+  # cleanly before a new pod stands up. The Celery worker already
+  # retries TritonUnavailable, so the brief gap is hidden from users.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "querymind.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: triton
+  template:
+    metadata:
+      labels:
+        {{- include "querymind.labels" . | nindent 8 }}
+        app.kubernetes.io/component: triton
+      annotations:
+        # Scrape Triton's per-model latency / throughput metrics
+        # directly. The ServiceMonitor in this chart also covers
+        # backend metrics; this annotation lets the cluster's main
+        # Prometheus pick Triton up without a ServiceMonitor for it.
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8002"
+        prometheus.io/path: "/metrics"
+        {{- with .Values.triton.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.triton.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.triton.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: triton
+          image: "{{ .Values.image.triton.repository }}:{{ .Values.image.triton.tag }}"
+          imagePullPolicy: {{ .Values.image.triton.pullPolicy }}
+          args:
+            - tritonserver
+            - --model-repository=/models
+            - --http-port=8001
+            - --metrics-port=8002
+            - --strict-model-config=false
+            - --log-info=1
+          ports:
+            - name: http
+              containerPort: 8001
+            - name: metrics
+              containerPort: 8002
+          env:
+            - name: TRITON_FORCE_CPU
+              value: {{ .Values.triton.forceCpu | quote }}
+            - name: BGE_PRECISION
+              value: {{ .Values.triton.precision | quote }}
+            - name: BGE_BATCH_SIZE
+              value: {{ .Values.triton.batchSize | quote }}
+            - name: BGE_MAX_LEN
+              value: {{ .Values.triton.maxSeqLen | quote }}
+            - name: PYTORCH_CUDA_ALLOC_CONF
+              value: "expandable_segments:True"
+            - name: TOKENIZERS_PARALLELISM
+              value: "false"
+            - name: HF_HOME
+              value: "/hf-cache"
+          resources:
+            {{- toYaml .Values.triton.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /v2/health/ready
+              port: 8001
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 24
+          livenessProbe:
+            httpGet:
+              path: /v2/health/live
+              port: 8001
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            - name: hf-cache
+              mountPath: /hf-cache
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 2Gi
+        - name: hf-cache
+          emptyDir:
+            sizeLimit: 8Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "querymind.fullname" . }}-triton
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "querymind.labels" . | nindent 4 }}
+    app.kubernetes.io/component: triton
+spec:
+  selector:
+    {{- include "querymind.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: triton
+  ports:
+    - name: http
+      port: 8001
+      targetPort: 8001
+    - name: metrics
+      port: 8002
+      targetPort: 8002
+  type: ClusterIP
+{{- end }}

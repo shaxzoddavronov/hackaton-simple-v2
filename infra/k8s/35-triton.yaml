@@ -1,0 +1,173 @@
+# Triton Inference Server for bge-m3 embeddings (Phase 6 / Phase 15
+# multilingual RAG). Tuned for NVIDIA L40S — see
+# infra/triton/README.md for the per-precision performance numbers.
+#
+# Topology:
+#   * One Deployment, single replica. bge-m3 + activations fit
+#     comfortably on a single L40S (48 GB VRAM); horizontal scaling
+#     belongs at the GPU-pool level via more Deployment replicas, not
+#     by stuffing more model instances onto one card.
+#   * NodeSelector pins to GPU-class nodes. Labels conform to the
+#     NVIDIA GPU Operator's defaults (`nvidia.com/gpu.product`); the
+#     example below targets L40S explicitly so a stray scheduler
+#     choice on a T4 node doesn't drop FP16 throughput by 6x. If you
+#     run a heterogenous fleet, drop the product label and rely on
+#     just the `nvidia.com/gpu` resource request.
+#   * The model repository is baked into the container image at
+#     `/models` so there's no PVC/ConfigMap mount to chase down at
+#     deploy time. Bge-m3 weights are pulled from HuggingFace once on
+#     first start; the emptyDir below caches them for the lifetime of
+#     the pod (gone on restart — acceptable trade-off, the download
+#     is ~30 s on a fast network).
+#
+# Wire-in:
+#   The backend talks to this service via the existing TRITON_URL
+#   ConfigMap key (see infra/k8s/20-configmap.yaml). Default
+#   `http://qm-triton:8001` matches the Service below.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: qm-triton
+  namespace: querymind
+  labels:
+    app: qm-triton
+spec:
+  selector:
+    app: qm-triton
+  ports:
+    - name: http
+      port: 8001
+      targetPort: 8001
+    - name: metrics
+      port: 8002
+      targetPort: 8002
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qm-triton
+  namespace: querymind
+  labels:
+    app: qm-triton
+spec:
+  replicas: 1
+  strategy:
+    # Triton holds open client connections during indexing jobs; a
+    # rolling restart that drops the only pod mid-batch would surface
+    # to the user as "Triton unavailable, falling back to BM25". The
+    # Celery retries autoretry_for=TritonUnavailable, so this is a
+    # soft failure, but Recreate keeps the worker queue cleaner: we
+    # drain the in-flight request set before standing up the new pod.
+    type: Recreate
+  selector:
+    matchLabels:
+      app: qm-triton
+  template:
+    metadata:
+      labels:
+        app: qm-triton
+      annotations:
+        # Prometheus scraper picks up Triton's metrics port directly.
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8002"
+        prometheus.io/path: "/metrics"
+    spec:
+      # Pin to L40S nodes. If your cluster doesn't have the NVIDIA
+      # GPU Operator labeling each node, replace this block with a
+      # plain `nodeSelector: { gpu-class: l40s }` driven by your own
+      # node labels. Either way, the `resources.limits` request below
+      # is the load-bearing scheduling key.
+      nodeSelector:
+        nvidia.com/gpu.product: NVIDIA-L40S
+      # Allow the pod to land on tainted GPU nodes — most clusters
+      # taint GPU nodes so CPU-only workloads don't drift onto them.
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: triton
+          # Build + push this image from infra/triton/Dockerfile. The
+          # tag below is a placeholder — replace with your registry.
+          image: querymind/triton-bge-m3:l40s-cu124
+          imagePullPolicy: IfNotPresent
+          args:
+            - tritonserver
+            - --model-repository=/models
+            - --http-port=8001
+            - --metrics-port=8002
+            - --strict-model-config=false
+            - --log-info=1
+          ports:
+            - name: http
+              containerPort: 8001
+            - name: metrics
+              containerPort: 8002
+          env:
+            - name: TRITON_FORCE_CPU
+              value: "0"
+            - name: BGE_PRECISION
+              value: "fp16"   # bf16 if you observe FP16 numerical drift
+            - name: BGE_BATCH_SIZE
+              value: "64"
+            - name: BGE_MAX_LEN
+              value: "512"
+            # CUDA allocator: avoid fragmentation across long-running
+            # indexing jobs.
+            - name: PYTORCH_CUDA_ALLOC_CONF
+              value: "expandable_segments:True"
+            - name: TOKENIZERS_PARALLELISM
+              value: "false"
+            # HuggingFace cache lives on emptyDir so the model isn't
+            # re-downloaded on every pod start; redirect HF_HOME so
+            # the loader writes there.
+            - name: HF_HOME
+              value: "/hf-cache"
+          resources:
+            requests:
+              # Headroom for tokenizer + sentence-transformers loader.
+              # bge-m3 host-side RAM stays ~2 GB even after model
+              # weights move to VRAM.
+              cpu: "1"
+              memory: "4Gi"
+              nvidia.com/gpu: 1
+            limits:
+              cpu: "4"
+              memory: "8Gi"
+              nvidia.com/gpu: 1
+          # Two-stage probes: readiness covers cold model load
+          # (~30 s on a warm HF cache, ~2 min on cold pull);
+          # liveness is much shorter once the model is up.
+          readinessProbe:
+            httpGet:
+              path: /v2/health/ready
+              port: 8001
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 24   # tolerates a 4-minute cold start
+          livenessProbe:
+            httpGet:
+              path: /v2/health/live
+              port: 8001
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # Triton spawns multiple internal threads; the default 64 MB
+          # /dev/shm trips a cuDNN scratch warning on batches of 64.
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            - name: hf-cache
+              mountPath: /hf-cache
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 2Gi
+        - name: hf-cache
+          emptyDir:
+            sizeLimit: 8Gi

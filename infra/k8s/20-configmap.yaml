@@ -19,7 +19,10 @@ data:
   VLLM_MODEL: "google/gemma-3-4b-it"
   # Triton — bge-m3 embeddings (1024d). Leave empty to disable RAG entirely
   # and force BM25 fallback.
-  TRITON_URL: "http://triton.querymind.svc.cluster.local:8001"
+  # Triton runs in-cluster under the qm-triton Service (see
+  # infra/k8s/35-triton.yaml). It's tuned for NVIDIA L40S with FP16
+  # weights + 2 GPU instances per pod.
+  TRITON_URL: "http://qm-triton.querymind.svc.cluster.local:8001"
   TRITON_EMBED_MODEL: "bge_m3"
   EMBEDDING_DIM: "1024"
   # Comma-separated allowed origins for the frontend. Tighten in prod.

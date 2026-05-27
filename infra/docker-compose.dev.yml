@@ -70,10 +70,10 @@ services:
   #     - qm_dev
 
   # Triton Inference Server — serves bge-m3 dense embeddings for the
-  # RAG layer. Built from ./triton/Dockerfile so sentence-transformers
-  # and CPU torch are baked in. First start downloads bge-m3 (~2 GB)
-  # into the named `triton_cache` volume; subsequent starts use the
-  # cache.
+  # RAG layer. Image defaults to CUDA torch (cu124) and is tuned for
+  # NVIDIA L40S (Ada Lovelace, sm_89, 48 GB VRAM); see infra/triton/README.md
+  # for the perf numbers. First start downloads bge-m3 (~2 GB) into
+  # the named `triton_cache` volume; subsequent starts use the cache.
   #
   # The agent gracefully falls back to BM25 schema pruning when this
   # service is offline (see services/rag/retriever.py), so it's safe
@@ -88,13 +88,21 @@ services:
       - tritonserver
       - --model-repository=/models
       - --http-port=8001
+      - --metrics-port=8002
       - --strict-model-config=false
-      - --log-verbose=1
+      - --log-info=1
     environment:
-      # Force CPU mode so the image works on GPU-less hosts. Unset or
-      # set to "0" to let sentence-transformers pick CUDA when the
-      # image is rebuilt with a CUDA torch wheel.
-      TRITON_FORCE_CPU: "1"
+      # GPU mode by default. On a CPU-only host (laptop, CI), set
+      # TRITON_FORCE_CPU=1 in the override file or via
+      # `docker compose run` — the model.py honours the flag.
+      TRITON_FORCE_CPU: "0"
+      # Inference precision on GPU. fp16 is the sweet spot on L40S
+      # Tensor Cores (2x throughput vs fp32, negligible retrieval-
+      # quality impact). Set to "bf16" if you see fp16 numerical
+      # instability; "fp32" for debug.
+      BGE_PRECISION: "fp16"
+      BGE_BATCH_SIZE: "64"
+      BGE_MAX_LEN: "512"
     ports:
       - "8001:8001"   # HTTP — matches Settings.TRITON_URL default
       - "8002:8002"   # Prometheus metrics
@@ -107,17 +115,23 @@ services:
       timeout: 5s
       retries: 20
       start_period: 120s  # bge-m3 download + load on first run
+    # Shared memory has to be larger than torch's default 64 MB or
+    # encode() with batch=64 trips the SHM-cleanup warning on cuDNN
+    # workspaces. 2 GB is plenty.
+    shm_size: "2gb"
+    # GPU reservation — comment this block out to run on CPU.
+    # On a single-GPU host this exposes /dev/nvidia0 to the container.
+    # In multi-GPU deployments swap `count: 1` for `device_ids: ["0"]`
+    # to pin a specific card.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: ["gpu"]
     networks:
       - qm_dev
-    # Uncomment to enable GPU acceleration (rebuild the Dockerfile with
-    # CUDA torch first).
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: ["gpu"]
 
   # ---------------------------------------------------------------------
   # Per-dialect dev databases.

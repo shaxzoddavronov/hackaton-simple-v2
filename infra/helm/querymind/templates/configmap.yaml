@@ -10,7 +10,17 @@ data:
   QM_ENVIRONMENT: {{ .Values.backend.env.QM_ENVIRONMENT | quote }}
   VLLM_ENDPOINT: {{ .Values.vllm.endpoint | quote }}
   VLLM_MODEL: {{ .Values.vllm.model | quote }}
+  {{- /*
+    Synthesize the in-cluster Triton URL when the chart spins up its
+    own Triton Deployment (triton.enabled=true). Caller can still
+    point .Values.triton.url at an external host — we honour that
+    override iff triton.enabled is false.
+  */ -}}
+  {{- if .Values.triton.enabled }}
+  TRITON_URL: {{ printf "http://%s-triton.%s.svc.cluster.local:8001" (include "querymind.fullname" .) .Release.Namespace | quote }}
+  {{- else }}
   TRITON_URL: {{ .Values.triton.url | quote }}
+  {{- end }}
   TRITON_EMBED_MODEL: {{ .Values.triton.embedModel | quote }}
   EMBEDDING_DIM: {{ .Values.triton.embeddingDim | quote }}
   CORS_ORIGINS: {{ .Values.backend.env.CORS_ORIGINS | quote }}

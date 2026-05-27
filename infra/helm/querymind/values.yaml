@@ -21,6 +21,12 @@ image:
     repository: querymind/frontend
     tag: "0.1.0"
     pullPolicy: IfNotPresent
+  triton:
+    # Built from infra/triton/Dockerfile. ``l40s-cu124`` is the tag we
+    # publish for the L40S-tuned image (CUDA 12.4 wheels, FP16 model.py).
+    repository: querymind/triton-bge-m3
+    tag: "l40s-cu124"
+    pullPolicy: IfNotPresent
   pullSecrets: []
 
 # -----------------------------------------------------------------------------
@@ -150,12 +156,49 @@ vllm:
   model: "google/gemma-3-4b-it"
 
 # -----------------------------------------------------------------------------
-# Triton (embeddings). Set url to "" to disable RAG and force BM25 fallback.
+# Triton (bge-m3 embeddings). Tuned for NVIDIA L40S — Ada Lovelace,
+# sm_89, 48 GB VRAM. The image runs FP16 on the GPU by default with 2
+# model instances co-located per pod; both come from
+# infra/triton/model_repository/bge_m3/config.pbtxt.
+#
+# Disable the in-cluster Deployment (triton.enabled=false) when you
+# point ``url`` at an externally-managed Triton. Set ``url=""`` to
+# disable RAG entirely and force BM25 fallback.
 # -----------------------------------------------------------------------------
 triton:
-  url: "http://triton.querymind.svc.cluster.local:8001"
+  enabled: true
+  url: "http://querymind-triton.querymind.svc.cluster.local:8001"
   embedModel: "bge_m3"
   embeddingDim: 1024
+  replicaCount: 1
+  # Inference knobs read by infra/triton/model_repository/bge_m3/1/model.py:
+  #   * forceCpu="1" disables the GPU path (debug only).
+  #   * precision=fp16 is the L40S sweet spot; bf16 trades some
+  #     throughput for better attention numerics; fp32 for debug.
+  #   * batchSize=64 fits comfortably in 48 GB at seq=512.
+  forceCpu: "0"
+  precision: "fp16"
+  batchSize: "64"
+  maxSeqLen: "512"
+  # GPU node targeting. The default selector pins to L40S explicitly so
+  # a stray scheduling decision doesn't drop FP16 throughput by 6x on a
+  # T4. Override with ``{}`` to allow any GPU node.
+  nodeSelector:
+    nvidia.com/gpu.product: NVIDIA-L40S
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule
+  podAnnotations: {}
+  resources:
+    requests:
+      cpu: "1"
+      memory: "4Gi"
+      nvidia.com/gpu: 1
+    limits:
+      cpu: "4"
+      memory: "8Gi"
+      nvidia.com/gpu: 1
 
 # -----------------------------------------------------------------------------
 # Ingress
