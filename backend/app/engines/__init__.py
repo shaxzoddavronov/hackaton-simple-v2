@@ -25,6 +25,7 @@ def register_all() -> None:
     from app.engines import elasticsearch as _es  # noqa: F401
     from app.engines import clickhouse as _ch  # noqa: F401
     from app.engines import mongodb as _mongo  # noqa: F401
+    from app.engines import oracle as _oracle  # noqa: F401
 
 
 __all__ = ["DIALECT_REGISTRY", "get_engine", "register_all"]
