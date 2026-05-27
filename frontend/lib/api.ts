@@ -89,7 +89,8 @@ export type Dialect =
   | "oracle"
   | "mongodb"
   | "elasticsearch"
-  | "duckdb";
+  | "duckdb"
+  | "mssql";
 
 export async function testConnection(payload: {
   dialect: Dialect;

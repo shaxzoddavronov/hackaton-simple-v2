@@ -29,6 +29,7 @@ const DIALECTS: { value: Dialect; label: string; supported: boolean }[] = [
   { value: "mongodb", label: "MongoDB", supported: true },
   { value: "elasticsearch", label: "Elasticsearch", supported: true },
   { value: "duckdb", label: "DuckDB", supported: true },
+  { value: "mssql", label: "SQL Server", supported: true },
 ];
 
 const STATUS_TINT: Record<string, string> = {
@@ -279,6 +280,7 @@ function AddConnectionPanel({
       clickhouse: "8123",
       oracle: "1521",
       mongodb: "27017",
+      mssql: "1433",
     };
     const next = defaults[dialect];
     if (next !== undefined) {
@@ -361,6 +363,19 @@ function AddConnectionPanel({
         name,
         dialect,
         connection_meta: { host, port: Number(port), db_name: dbName },
+        credentials: { user, password },
+        auth_kind: "password" as const,
+      };
+    }
+    if (dialect === "mssql") {
+      return {
+        name,
+        dialect,
+        connection_meta: {
+          host,
+          port: Number(port) || 1433,
+          db_name: dbName,
+        },
         credentials: { user, password },
         auth_kind: "password" as const,
       };
@@ -696,7 +711,8 @@ function AddConnectionPanel({
           </>
         ) : dialect === "mysql" ||
           dialect === "clickhouse" ||
-          dialect === "oracle" ? (
+          dialect === "oracle" ||
+          dialect === "mssql" ? (
           <>
             <label className="block space-y-1">
               <span className="text-xs uppercase tracking-wider text-on-surface-variant">

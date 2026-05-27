@@ -186,7 +186,7 @@ class WorkspaceConnection(Base):
     __table_args__ = (
         CheckConstraint(
             "dialect IN ('postgres','sqlite','mysql','clickhouse',"
-            "'oracle','mongodb','elasticsearch','duckdb')",
+            "'oracle','mongodb','elasticsearch','duckdb','mssql')",
             name="ck_workspace_connections_dialect",
         ),
         CheckConstraint(
@@ -385,10 +385,10 @@ class QueryHistory(Base):
     message: Mapped[Message] = relationship(back_populates="query_history")
 
     __table_args__ = (
-        # Mirrors workspace_connections.dialect — see migrations 0004/0005.
+        # Mirrors workspace_connections.dialect — see migrations 0004/0005/0007.
         CheckConstraint(
             "dialect IN ('postgres','sqlite','mysql','clickhouse',"
-            "'oracle','mongodb','elasticsearch','duckdb')",
+            "'oracle','mongodb','elasticsearch','duckdb','mssql')",
             name="ck_query_history_dialect",
         ),
         CheckConstraint(

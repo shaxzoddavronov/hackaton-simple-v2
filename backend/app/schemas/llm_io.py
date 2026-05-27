@@ -44,6 +44,7 @@ class SqlPlan(BaseModel):
         "oracle",
         "elasticsearch",
         "duckdb",
+        "mssql",
     ]
     sql: str = Field(
         description=(
@@ -75,7 +76,7 @@ class SubQuery(BaseModel):
     )
     dialect: Literal[
         "postgres", "sqlite", "mysql", "clickhouse",
-        "oracle", "elasticsearch", "duckdb",
+        "oracle", "elasticsearch", "duckdb", "mssql",
     ]
     query: str = Field(
         description=(
