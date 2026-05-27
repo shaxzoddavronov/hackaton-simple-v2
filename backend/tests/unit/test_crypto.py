@@ -81,7 +81,8 @@ def test_unset_master_key_raises(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.delenv("QM_MASTER_KEY", raising=False)
     config.get_settings.cache_clear()  # type: ignore[attr-defined]
-    config.settings = config.get_settings()
+    # Bypass backend/.env so "unset" means truly unset, not "fell back to .env".
+    config.settings = config.Settings(_env_file=None)  # type: ignore[call-arg]
     crypto._KEY_BY_VERSION.clear()
     with pytest.raises(RuntimeError, match="QM_MASTER_KEY"):
         crypto.encrypt(b"x")
