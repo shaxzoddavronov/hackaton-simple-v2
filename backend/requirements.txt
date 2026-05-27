@@ -10,6 +10,7 @@ python-multipart
 sqlalchemy[asyncio]>=2.0
 asyncpg
 aiosqlite
+asyncmy>=0.2.9
 alembic
 
 # Config / validation
