@@ -88,7 +88,8 @@ export type Dialect =
   | "clickhouse"
   | "oracle"
   | "mongodb"
-  | "elasticsearch";
+  | "elasticsearch"
+  | "duckdb";
 
 export async function testConnection(payload: {
   dialect: Dialect;

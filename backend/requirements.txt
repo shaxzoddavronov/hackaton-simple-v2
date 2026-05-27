@@ -18,6 +18,7 @@ asyncmy>=0.2.9
 clickhouse-connect>=0.7
 motor>=3.5
 oracledb>=2.0
+duckdb>=1.0
 alembic
 
 # Config / validation

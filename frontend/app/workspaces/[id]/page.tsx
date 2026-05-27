@@ -28,6 +28,7 @@ const DIALECTS: { value: Dialect; label: string; supported: boolean }[] = [
   { value: "oracle", label: "Oracle", supported: true },
   { value: "mongodb", label: "MongoDB", supported: true },
   { value: "elasticsearch", label: "Elasticsearch", supported: true },
+  { value: "duckdb", label: "DuckDB", supported: true },
 ];
 
 const STATUS_TINT: Record<string, string> = {
@@ -308,6 +309,16 @@ function AddConnectionPanel({
         auth_kind: "none" as const,
       };
     }
+    if (dialect === "duckdb") {
+      const creds: Record<string, string> = {};
+      return {
+        name,
+        dialect,
+        connection_meta: { path: path || ":memory:" },
+        credentials: creds,
+        auth_kind: "none" as const,
+      };
+    }
     if (dialect === "elasticsearch") {
       const hosts = esHosts
         .split(",")
@@ -573,6 +584,22 @@ function AddConnectionPanel({
               placeholder="/var/lib/querymind/sample.db"
               className="w-full input"
             />
+          </label>
+        ) : dialect === "duckdb" ? (
+          <label className="block space-y-1">
+            <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              DuckDB file path
+            </span>
+            <input
+              value={path}
+              onChange={(e) => setPath(e.target.value)}
+              placeholder=":memory:"
+              className="w-full input"
+            />
+            <span className="text-xs text-on-surface-variant">
+              Defaults to <code>:memory:</code> when left blank. On-disk
+              files are opened read-only.
+            </span>
           </label>
         ) : dialect === "elasticsearch" ? (
           <>

@@ -80,11 +80,12 @@ class User(Base):
 class Workspace(Base):
     """A folder/grouping for one or more database connections.
 
-    Post-migration 0003, a Workspace no longer carries connection details
-    itself — those live on :class:`WorkspaceConnection`. The legacy
-    ``dialect`` / ``connection_meta`` columns are kept nullable for one
-    release so a rollback can rebuild from them, but **new code must not
-    read them**. They will be dropped in a follow-up migration.
+    Connection details (dialect, metadata, credentials) live on
+    :class:`WorkspaceConnection`. Migration 0003 split them out; the
+    legacy ``dialect`` / ``connection_meta`` columns lingered as
+    nullable shadows through migration 0005; migration 0006 dropped
+    them. ``status`` here remains as an aggregate hint — the
+    canonical per-DB status lives on each WorkspaceConnection.
     """
 
     __tablename__ = "workspaces"
@@ -98,13 +99,6 @@ class Workspace(Base):
         nullable=False,
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    # DEPRECATED — see class docstring. Do not read in new code.
-    dialect: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    connection_meta: Mapped[dict[str, Any] | None] = mapped_column(
-        JSONType, nullable=True
-    )
-    # Status here is just an aggregate hint — the canonical per-DB
-    # status lives on each WorkspaceConnection.
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, server_default=text("'pending'")
     )
@@ -128,13 +122,6 @@ class Workspace(Base):
     )
 
     __table_args__ = (
-        # Keep the legacy CHECK as None-tolerant so the nullable column
-        # doesn't trip it. The new dialects live on WorkspaceConnection.
-        CheckConstraint(
-            "dialect IS NULL OR dialect IN ('postgres','sqlite','mysql',"
-            "'clickhouse','oracle','mongodb','elasticsearch')",
-            name="ck_workspaces_dialect",
-        ),
         CheckConstraint(
             "status IN ('pending','profiling','ready','error','auth_error')",
             name="ck_workspaces_status",
@@ -199,7 +186,7 @@ class WorkspaceConnection(Base):
     __table_args__ = (
         CheckConstraint(
             "dialect IN ('postgres','sqlite','mysql','clickhouse',"
-            "'oracle','mongodb','elasticsearch')",
+            "'oracle','mongodb','elasticsearch','duckdb')",
             name="ck_workspace_connections_dialect",
         ),
         CheckConstraint(
@@ -398,10 +385,10 @@ class QueryHistory(Base):
     message: Mapped[Message] = relationship(back_populates="query_history")
 
     __table_args__ = (
-        # Mirrors workspace_connections.dialect — see migration 0004.
+        # Mirrors workspace_connections.dialect — see migrations 0004/0005.
         CheckConstraint(
             "dialect IN ('postgres','sqlite','mysql','clickhouse',"
-            "'oracle','mongodb','elasticsearch')",
+            "'oracle','mongodb','elasticsearch','duckdb')",
             name="ck_query_history_dialect",
         ),
         CheckConstraint(
