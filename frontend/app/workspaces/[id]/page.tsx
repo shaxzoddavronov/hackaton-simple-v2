@@ -22,11 +22,11 @@ import {
 const DIALECTS: { value: Dialect; label: string; supported: boolean }[] = [
   { value: "postgres", label: "Postgres", supported: true },
   { value: "sqlite", label: "SQLite", supported: true },
+  { value: "mysql", label: "MySQL", supported: true },
+  { value: "clickhouse", label: "ClickHouse", supported: true },
+  { value: "oracle", label: "Oracle", supported: true },
+  { value: "mongodb", label: "MongoDB", supported: true },
   { value: "elasticsearch", label: "Elasticsearch", supported: true },
-  { value: "mysql", label: "MySQL", supported: false },
-  { value: "clickhouse", label: "ClickHouse", supported: false },
-  { value: "oracle", label: "Oracle", supported: false },
-  { value: "mongodb", label: "MongoDB", supported: false },
 ];
 
 const STATUS_TINT: Record<string, string> = {
@@ -224,6 +224,10 @@ function AddConnectionPanel({
   );
   const [esApiKey, setEsApiKey] = useState("");
   const [esVerifyCerts, setEsVerifyCerts] = useState(true);
+  // MongoDB-specific
+  const [mongoAuth, setMongoAuth] = useState<"none" | "password">("none");
+  const [mongoTls, setMongoTls] = useState(false);
+  const [mongoReplicaSet, setMongoReplicaSet] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -246,7 +250,31 @@ function AddConnectionPanel({
     esAuthMode,
     esApiKey,
     esVerifyCerts,
+    mongoAuth,
+    mongoTls,
+    mongoReplicaSet,
   ]);
+
+  // When the user picks a new SQL-ish dialect, snap the port to that
+  // dialect's well-known default so the form doesn't keep showing the
+  // previous dialect's port (e.g. 5432 lingering after switching to
+  // MySQL).
+  useEffect(() => {
+    const defaults: Partial<Record<Dialect, string>> = {
+      postgres: "5432",
+      mysql: "3306",
+      clickhouse: "8123",
+      oracle: "1521",
+      mongodb: "27017",
+    };
+    const next = defaults[dialect];
+    if (next !== undefined) {
+      setPort(next);
+    }
+    if (dialect === "clickhouse" && !user) {
+      setUser("default");
+    }
+  }, [dialect]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function buildPayload() {
     if (dialect === "postgres") {
@@ -259,11 +287,12 @@ function AddConnectionPanel({
       };
     }
     if (dialect === "sqlite") {
+      const creds: Record<string, string> = {};
       return {
         name,
         dialect,
         connection_meta: { path },
-        credentials: {},
+        credentials: creds,
         auth_kind: "none" as const,
       };
     }
@@ -286,12 +315,61 @@ function AddConnectionPanel({
         auth_kind: esAuthMode === "none" ? "none" : "password",
       } as const;
     }
-    // Coming dialects — empty for now.
+    if (dialect === "mysql") {
+      return {
+        name,
+        dialect,
+        connection_meta: { host, port: Number(port), db_name: dbName, ssl },
+        credentials: { user, password },
+        auth_kind: "password" as const,
+      };
+    }
+    if (dialect === "clickhouse") {
+      return {
+        name,
+        dialect,
+        connection_meta: { host, port: Number(port), db_name: dbName, ssl },
+        credentials: { user, password },
+        auth_kind: "password" as const,
+      };
+    }
+    if (dialect === "oracle") {
+      return {
+        name,
+        dialect,
+        connection_meta: { host, port: Number(port), db_name: dbName },
+        credentials: { user, password },
+        auth_kind: "password" as const,
+      };
+    }
+    if (dialect === "mongodb") {
+      const meta: Record<string, unknown> = {
+        host,
+        port: Number(port),
+        db_name: dbName,
+        tls: mongoTls,
+      };
+      if (mongoReplicaSet) {
+        meta.replica_set = mongoReplicaSet;
+      }
+      const creds: Record<string, string> =
+        mongoAuth === "password" ? { user, password } : {};
+      return {
+        name,
+        dialect,
+        connection_meta: meta,
+        credentials: creds,
+        auth_kind: mongoAuth === "password" ? "password" : "none",
+      } as const;
+    }
+    // Fallback — should not be reachable now that every dialect is supported.
+    const emptyMeta: Record<string, unknown> = {};
+    const emptyCreds: Record<string, string> = {};
     return {
       name,
       dialect,
-      connection_meta: {},
-      credentials: {},
+      connection_meta: emptyMeta,
+      credentials: emptyCreds,
       auth_kind: "none" as const,
     };
   }
@@ -396,8 +474,7 @@ function AddConnectionPanel({
 
         {!supported ? (
           <div className="rounded-xl border border-outline/40 bg-surface-container-high/40 px-3 py-2 text-on-surface-variant text-xs">
-            <b>{dialect}</b> engine hozir hali plug qilinmagan. Phase 2'da
-            qo'shiladi. Hozir <b>postgres</b> yoki <b>sqlite</b> ni tanlang.
+            <b>{dialect}</b> engine hozir hali plug qilinmagan.
           </div>
         ) : null}
 
@@ -575,6 +652,202 @@ function AddConnectionPanel({
                 onChange={(e) => setEsVerifyCerts(e.target.checked)}
               />
               Verify TLS certificates
+            </label>
+          </>
+        ) : dialect === "mysql" ||
+          dialect === "clickhouse" ||
+          dialect === "oracle" ? (
+          <>
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                Host
+              </span>
+              <input
+                required
+                value={host}
+                onChange={(e) => setHost(e.target.value)}
+                className="w-full input"
+              />
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  Port
+                </span>
+                <input
+                  required
+                  type="number"
+                  value={port}
+                  onChange={(e) => setPort(e.target.value)}
+                  className="w-full input"
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  {dialect === "oracle" ? "Service name" : "Database"}
+                </span>
+                <input
+                  required
+                  value={dbName}
+                  onChange={(e) => setDbName(e.target.value)}
+                  className="w-full input"
+                />
+              </label>
+            </div>
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                User
+              </span>
+              <input
+                required={dialect !== "clickhouse"}
+                value={user}
+                onChange={(e) => setUser(e.target.value)}
+                className="w-full input"
+              />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                Password
+              </span>
+              <input
+                required={dialect !== "clickhouse"}
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full input"
+              />
+            </label>
+            {dialect === "mysql" ? (
+              <label className="flex items-center gap-2 text-sm text-on-surface-variant">
+                <input
+                  type="checkbox"
+                  checked={ssl}
+                  onChange={(e) => setSsl(e.target.checked)}
+                />
+                Require TLS
+              </label>
+            ) : null}
+            {dialect === "clickhouse" ? (
+              <label className="flex items-center gap-2 text-sm text-on-surface-variant">
+                <input
+                  type="checkbox"
+                  checked={ssl}
+                  onChange={(e) => setSsl(e.target.checked)}
+                />
+                Use HTTPS
+              </label>
+            ) : null}
+          </>
+        ) : dialect === "mongodb" ? (
+          <>
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                Host
+              </span>
+              <input
+                required
+                value={host}
+                onChange={(e) => setHost(e.target.value)}
+                className="w-full input"
+              />
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  Port
+                </span>
+                <input
+                  required
+                  type="number"
+                  value={port}
+                  onChange={(e) => setPort(e.target.value)}
+                  className="w-full input"
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  Database
+                </span>
+                <input
+                  required
+                  value={dbName}
+                  onChange={(e) => setDbName(e.target.value)}
+                  className="w-full input"
+                />
+              </label>
+            </div>
+            <div className="space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                Auth
+              </span>
+              <div className="flex gap-2">
+                {(
+                  [
+                    { v: "none", label: "None" },
+                    { v: "password", label: "User + password" },
+                  ] as const
+                ).map((m) => (
+                  <button
+                    key={m.v}
+                    type="button"
+                    onClick={() => setMongoAuth(m.v)}
+                    className={
+                      "px-3 py-1.5 rounded-xl text-sm " +
+                      (mongoAuth === m.v
+                        ? "bg-primary-container/30 text-primary"
+                        : "bg-surface-container-high/40 text-on-surface-variant")
+                    }
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {mongoAuth === "password" ? (
+              <>
+                <label className="block space-y-1">
+                  <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                    User
+                  </span>
+                  <input
+                    required
+                    value={user}
+                    onChange={(e) => setUser(e.target.value)}
+                    className="w-full input"
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                    Password
+                  </span>
+                  <input
+                    required
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full input"
+                  />
+                </label>
+              </>
+            ) : null}
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                Replica set (optional)
+              </span>
+              <input
+                value={mongoReplicaSet}
+                onChange={(e) => setMongoReplicaSet(e.target.value)}
+                placeholder="rs0"
+                className="w-full input"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm text-on-surface-variant">
+              <input
+                type="checkbox"
+                checked={mongoTls}
+                onChange={(e) => setMongoTls(e.target.checked)}
+              />
+              Use TLS
             </label>
           </>
         ) : null}
