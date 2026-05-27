@@ -4,7 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository state
 
-Waves 1–5 from `PLAN.md` are landed: backend FastAPI app, SQLAlchemy/Alembic metadata DB, Postgres + SQLite engine adapters, read-only validator, LangGraph agent with all nine nodes, Celery profiling worker, and a Next.js 14 frontend (auth, workspaces, chat with SSE, schema explorer, settings). A **RAG layer** has been added on top (Wave 6): pgvector store, Triton-served bge-m3 embeddings, daily schema-diff job, and a `rag_retriever` node between `schema_loader` and `query_planner`. `PLAN.md` remains the source of truth for what hasn't shipped yet — read it before adding scope.
+Waves 1–5 from `PLAN.md` plus several extensions are landed:
+
+- **Wave 1–5**: backend FastAPI app, SQLAlchemy/Alembic metadata DB, agent (9 LangGraph nodes), Celery profiling worker, Next.js 14 frontend (auth, workspaces, chat SSE, schema explorer, settings).
+- **Wave 6 — RAG layer**: pgvector store, Triton-served bge-m3 embeddings, daily schema-diff job, `rag_retriever` node between `schema_loader` and `query_planner`.
+- **Phase 1 — multi-connection workspaces**: a Workspace is now a folder holding N WorkspaceConnections, each its own dialect + creds + schema bundle + RAG chunks. Migration 0003 + 0004.
+- **Phase 2 — Elasticsearch engine**: non-SQL adapter with JSON-DSL validator. Planner emits envelope `{"index","body"}`; validator blocks `script`, `_delete_by_query`, system indices, etc.
+- **Phase 3 — Federation layer**: `coordinator → multi_schema_loader → federated_planner → federated_executor` path. `FederatedPlan` decomposes cross-DB questions into N parallel sub-queries plus a merge pipeline (join / union / concat) implemented in pure-Python `services/federation_merge.py`. UI shows per-sub-query breakdown via `FederationBadge`.
+- **Phase 4 — Dialect adapters**: MySQL (asyncmy), ClickHouse (clickhouse-connect), MongoDB (motor + JSON-pipeline validator), Oracle (oracledb thin mode). All seven dialects in the registry; UI form supports all.
+
+`PLAN.md` remains the source of truth for what hasn't shipped yet — read it before adding scope.
 
 ## Product in one paragraph
 
@@ -13,7 +22,7 @@ Waves 1–5 from `PLAN.md` are landed: backend FastAPI app, SQLAlchemy/Alembic m
 ## Architecture invariants (do not violate without updating PLAN.md)
 
 - **No external LLM APIs.** vLLM at `http://localhost:8000/v1` is the only model endpoint. Structured output goes through `response_format={"type":"json_schema", ...}` against Pydantic-derived schemas — see `app/agents/llm.py::LLMClient.structured`. Never parse free-text JSON from the model.
-- **Dialect abstraction lives in one place: `backend/app/engines/base.py`.** Every other module talks to the `QueryEngine` Protocol. Code outside `engines/` must never branch on `dialect`. New dialects (MySQL, MSSQL, MongoDB) plug in by `@register("…")` in `backend/app/engines/registry.py` — no other file changes.
+- **Dialect abstraction lives in `backend/app/engines/`.** Every concrete adapter satisfies the `QueryEngine` Protocol in `base.py` and registers itself via `@register("…")`. Seven dialects ship today: `postgres`, `sqlite`, `mysql`, `clickhouse`, `oracle` (SQL family — validated by `sqlglot`); `elasticsearch`, `mongodb` (non-SQL — validated by their own JSON-DSL validators in `services/`). Code outside `engines/` (planner + validator + executor) branches on dialect ONLY at the three legal dispatch points: choosing the planner system prompt, choosing the validator, and choosing the engine. New SQL dialects are a copy-paste of `postgres.py` + driver swap. New NoSQL dialects need their own validator + planner prompt; mirror `mongodb.py` for the shape.
 - **Read-only is defense in depth, all three layers required:**
   1. Boundary — the connect form documents the read-only GRANT recipe and probes write access.
   2. Parse — `services/readonly_validator.py` uses `sqlglot.parse(sql, read=dialect)`, walks the AST, rejects any DML/DDL/`SET`/`COPY`/`GRANT`/multi-statement input and a denylist of system tables and dangerous functions (`pg_sleep`, `pg_read_file`, `dblink`, `load_file`, …). The malicious corpus in `tests/unit/test_readonly_validator.py` is the spec — it must reject every line.
