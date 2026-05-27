@@ -1,0 +1,209 @@
+# QueryMind AI — Helm values.
+#
+# Every tunable lives here. Defaults match infra/k8s/*.yaml so a vanilla
+# `helm install` produces the same topology as `kubectl apply -f infra/k8s/`.
+#
+# Override at install time with `--set` or a values file:
+#   helm install querymind infra/helm/querymind \
+#     --namespace querymind --create-namespace \
+#     --set secrets.jwtSecret=$(openssl rand -base64 48) \
+#     --set secrets.qmMasterKey=$(openssl rand -base64 32)
+
+# -----------------------------------------------------------------------------
+# Container images
+# -----------------------------------------------------------------------------
+image:
+  backend:
+    repository: querymind/backend
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  frontend:
+    repository: querymind/frontend
+    tag: "0.1.0"
+    pullPolicy: IfNotPresent
+  pullSecrets: []
+
+# -----------------------------------------------------------------------------
+# Backend (FastAPI)
+# -----------------------------------------------------------------------------
+backend:
+  enabled: true
+  replicaCount: 2
+  service:
+    type: ClusterIP
+    port: 8080
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "2"
+      memory: "2Gi"
+  podAnnotations: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  env:
+    QM_ENVIRONMENT: "production"
+    CORS_ORIGINS: "https://querymind.example.com"
+    RAG_TOP_K: "12"
+    RAG_DIFF_CHECK_HOUR_UTC: "0"
+
+# -----------------------------------------------------------------------------
+# Frontend (Next.js)
+# -----------------------------------------------------------------------------
+frontend:
+  enabled: true
+  replicaCount: 2
+  service:
+    type: ClusterIP
+    port: 3000
+  publicApiBaseUrl: "https://querymind.example.com/api"
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "1"
+      memory: "512Mi"
+
+# -----------------------------------------------------------------------------
+# Celery worker (schema profiling, RAG indexing)
+# -----------------------------------------------------------------------------
+worker:
+  enabled: true
+  replicaCount: 1
+  concurrency: 4
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "256Mi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+
+# -----------------------------------------------------------------------------
+# Celery beat (daily RAG diff scheduler)
+# -----------------------------------------------------------------------------
+beat:
+  enabled: true
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "250m"
+      memory: "256Mi"
+
+# -----------------------------------------------------------------------------
+# Postgres (pgvector). Disable to BYO database.
+# -----------------------------------------------------------------------------
+postgres:
+  enabled: true
+  image:
+    repository: pgvector/pgvector
+    tag: "pg16"
+    pullPolicy: IfNotPresent
+  auth:
+    username: querymind
+    database: querymind
+    # Password is sourced from .Values.secrets.postgresPassword.
+  persistence:
+    enabled: true
+    size: 20Gi
+    storageClass: ""
+  service:
+    port: 5432
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "2"
+      memory: "2Gi"
+
+# -----------------------------------------------------------------------------
+# Redis (Celery broker + slowapi rate-limit store). Disable to BYO.
+# -----------------------------------------------------------------------------
+redis:
+  enabled: true
+  image:
+    repository: redis
+    tag: "7-alpine"
+    pullPolicy: IfNotPresent
+  service:
+    port: 6379
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "500m"
+      memory: "256Mi"
+
+# -----------------------------------------------------------------------------
+# vLLM (LLM endpoint). Always external — vLLM needs a GPU and is usually
+# deployed separately. These values just point the backend at it.
+# -----------------------------------------------------------------------------
+vllm:
+  endpoint: "http://vllm.querymind.svc.cluster.local:8000/v1"
+  model: "google/gemma-3-4b-it"
+
+# -----------------------------------------------------------------------------
+# Triton (embeddings). Set url to "" to disable RAG and force BM25 fallback.
+# -----------------------------------------------------------------------------
+triton:
+  url: "http://triton.querymind.svc.cluster.local:8001"
+  embedModel: "bge_m3"
+  embeddingDim: 1024
+
+# -----------------------------------------------------------------------------
+# Ingress
+# -----------------------------------------------------------------------------
+ingress:
+  enabled: true
+  className: nginx
+  host: querymind.example.com
+  tls:
+    enabled: true
+    secretName: querymind-tls
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    # SSE: buffering off, long timeouts.
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "16m"
+    # Backend mounts routers at root (/auth, /chat, ...). Strip /api here so
+    # the frontend can keep API_BASE_URL=https://host/api without app changes.
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+
+# -----------------------------------------------------------------------------
+# Monitoring (Prometheus Operator integration)
+# -----------------------------------------------------------------------------
+monitoring:
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    scrapeTimeout: 10s
+    # Labels Prometheus uses to select the ServiceMonitor (set to match
+    # your kube-prometheus-stack release label, e.g. "release: prom").
+    additionalLabels: {}
+
+# -----------------------------------------------------------------------------
+# Secrets. Provide via --set or a sealed-secrets / external-secrets backend.
+# Chart REFUSES to render a usable deployment if qmMasterKey or jwtSecret are
+# empty (see templates/secret.yaml's required calls).
+# -----------------------------------------------------------------------------
+secrets:
+  qmMasterKey: ""
+  jwtSecret: ""
+  # Override to point at an external DB. When postgres.enabled=true and this
+  # is empty, the chart synthesizes the in-cluster URL automatically.
+  databaseUrl: ""
+  # Override to point at an external Redis. When redis.enabled=true and this
+  # is empty, the chart synthesizes the in-cluster URL automatically.
+  redisUrl: ""
+  vllmApiKey: "not-needed"
+  postgresPassword: "querymind"

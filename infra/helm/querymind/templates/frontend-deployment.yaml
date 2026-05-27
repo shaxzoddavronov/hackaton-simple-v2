@@ -1,0 +1,53 @@
+{{- if .Values.frontend.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "querymind.fullname" . }}-frontend
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "querymind.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+spec:
+  replicas: {{ .Values.frontend.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "querymind.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: frontend
+  template:
+    metadata:
+      labels:
+        {{- include "querymind.labels" . | nindent 8 }}
+        app.kubernetes.io/component: frontend
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: frontend
+          image: "{{ .Values.image.frontend.repository }}:{{ .Values.image.frontend.tag }}"
+          imagePullPolicy: {{ .Values.image.frontend.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: NEXT_PUBLIC_API_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "querymind.fullname" . }}-config
+                  key: NEXT_PUBLIC_API_BASE_URL
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.frontend.resources | nindent 12 }}
+{{- end -}}

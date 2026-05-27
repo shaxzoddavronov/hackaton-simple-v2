@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "querymind.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "querymind.labels" . | nindent 4 }}
+    app.kubernetes.io/component: config
+data:
+  QM_ENVIRONMENT: {{ .Values.backend.env.QM_ENVIRONMENT | quote }}
+  VLLM_ENDPOINT: {{ .Values.vllm.endpoint | quote }}
+  VLLM_MODEL: {{ .Values.vllm.model | quote }}
+  TRITON_URL: {{ .Values.triton.url | quote }}
+  TRITON_EMBED_MODEL: {{ .Values.triton.embedModel | quote }}
+  EMBEDDING_DIM: {{ .Values.triton.embeddingDim | quote }}
+  CORS_ORIGINS: {{ .Values.backend.env.CORS_ORIGINS | quote }}
+  RAG_TOP_K: {{ .Values.backend.env.RAG_TOP_K | quote }}
+  RAG_DIFF_CHECK_HOUR_UTC: {{ .Values.backend.env.RAG_DIFF_CHECK_HOUR_UTC | quote }}
+  RATE_LIMIT_STORAGE_URL: {{ include "querymind.rateLimitStorageUrl" . | quote }}
+  NEXT_PUBLIC_API_BASE_URL: {{ .Values.frontend.publicApiBaseUrl | quote }}

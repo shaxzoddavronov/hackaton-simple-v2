@@ -1,0 +1,69 @@
+# QueryMind AI — Redis (Celery broker + slowapi rate-limit store).
+#
+# Single replica, ephemeral storage. v1 doesn't persist queue state; if a
+# pod restarts mid-task the worker will retry per Celery's defaults.
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: querymind
+  labels:
+    app.kubernetes.io/name: querymind
+    app.kubernetes.io/component: redis
+    app.kubernetes.io/version: "0.1.0"
+spec:
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+  selector:
+    app.kubernetes.io/name: querymind
+    app.kubernetes.io/component: redis
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: querymind
+  labels:
+    app.kubernetes.io/name: querymind
+    app.kubernetes.io/component: redis
+    app.kubernetes.io/version: "0.1.0"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: querymind
+      app.kubernetes.io/component: redis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: querymind
+        app.kubernetes.io/component: redis
+        app.kubernetes.io/version: "0.1.0"
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: redis
+              containerPort: 6379
+          args: ["redis-server", "--save", "", "--appendonly", "no"]
+          readinessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"

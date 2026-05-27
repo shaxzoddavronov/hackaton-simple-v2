@@ -1,0 +1,28 @@
+# QueryMind AI — Prometheus ServiceMonitor.
+#
+# NOTE: this manifest assumes you run the Prometheus Operator (e.g. the
+# kube-prometheus-stack chart). If you don't, skip this file — the
+# backend still exposes /metrics, you'll just need to wire a static
+# scrape config in your Prometheus instead.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: backend
+  namespace: querymind
+  labels:
+    app.kubernetes.io/name: querymind
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/version: "0.1.0"
+spec:
+  namespaceSelector:
+    matchNames:
+      - querymind
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: querymind
+      app.kubernetes.io/component: backend
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s

@@ -1,0 +1,58 @@
+# QueryMind AI — Ingress (nginx).
+#
+# Routes:
+#   /api/*   → backend Service :8080  (the API; SSE chat lives here)
+#   /*       → frontend Service :3000 (Next.js)
+#
+# SSE-critical annotations:
+#   * proxy-buffering: off  — token-by-node events must flush immediately.
+#   * proxy-read-timeout 3600 — agent graph can run multi-minute queries.
+#
+# TLS is via cert-manager's `letsencrypt-prod` ClusterIssuer. Replace the
+# host before applying.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: querymind
+  namespace: querymind
+  labels:
+    app.kubernetes.io/name: querymind
+    app.kubernetes.io/component: ingress
+    app.kubernetes.io/version: "0.1.0"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "16m"
+    # The backend mounts its routers at the root (/auth, /chat, /workspaces),
+    # NOT under /api. We strip the /api prefix at the ingress so the frontend
+    # can keep NEXT_PUBLIC_API_BASE_URL=https://host/api without server-side
+    # changes. See DEPLOY.md troubleshooting note.
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - querymind.example.com
+      secretName: querymind-tls
+  rules:
+    - host: querymind.example.com
+      http:
+        paths:
+          # /api/<anything> rewrites to /<anything> at the backend.
+          - path: /api(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 3000

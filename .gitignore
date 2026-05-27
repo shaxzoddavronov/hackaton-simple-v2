@@ -32,3 +32,6 @@ Thumbs.db
 *.db
 
 .logs
+
+# ── Kubernetes secrets (template stays committed, materialized copy doesn't) ─
+infra/k8s/10-secret.yaml

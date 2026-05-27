@@ -1,0 +1,51 @@
+# QueryMind AI — Celery worker.
+#
+# Runs schema profiling, RAG indexing, and (optionally) the daily diff
+# task triggered by celery-beat. Same image as backend; just a different
+# entrypoint. Concurrency=4 is a safe default for the listed task mix —
+# bump it only if RAG indexing throughput is the bottleneck.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-worker
+  namespace: querymind
+  labels:
+    app.kubernetes.io/name: querymind
+    app.kubernetes.io/component: celery-worker
+    app.kubernetes.io/version: "0.1.0"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: querymind
+      app.kubernetes.io/component: celery-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: querymind
+        app.kubernetes.io/component: celery-worker
+        app.kubernetes.io/version: "0.1.0"
+    spec:
+      containers:
+        - name: celery-worker
+          image: querymind/backend:0.1.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - celery
+            - -A
+            - app.workers.celery_app:celery_app
+            - worker
+            - --loglevel=info
+            - --concurrency=4
+          envFrom:
+            - configMapRef:
+                name: querymind-config
+            - secretRef:
+                name: querymind-secrets
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"

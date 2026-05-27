@@ -1,0 +1,44 @@
+{{- if .Values.worker.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "querymind.fullname" . }}-celery-worker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "querymind.labels" . | nindent 4 }}
+    app.kubernetes.io/component: celery-worker
+spec:
+  replicas: {{ .Values.worker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "querymind.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: celery-worker
+  template:
+    metadata:
+      labels:
+        {{- include "querymind.labels" . | nindent 8 }}
+        app.kubernetes.io/component: celery-worker
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: celery-worker
+          image: "{{ .Values.image.backend.repository }}:{{ .Values.image.backend.tag }}"
+          imagePullPolicy: {{ .Values.image.backend.pullPolicy }}
+          command:
+            - celery
+            - -A
+            - app.workers.celery_app:celery_app
+            - worker
+            - --loglevel=info
+            - --concurrency={{ .Values.worker.concurrency }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "querymind.fullname" . }}-config
+            - secretRef:
+                name: {{ include "querymind.fullname" . }}-secrets
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}
+{{- end -}}

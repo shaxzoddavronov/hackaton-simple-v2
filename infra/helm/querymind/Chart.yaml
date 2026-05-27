@@ -1,0 +1,18 @@
+apiVersion: v2
+name: querymind
+description: QueryMind multi-dialect NL-to-SQL
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.25.0-0"
+home: https://github.com/anasazamov55/hackaton-simple-v2
+sources:
+  - https://github.com/anasazamov55/hackaton-simple-v2
+maintainers:
+  - name: QueryMind Team
+keywords:
+  - nl-to-sql
+  - llm
+  - rag
+  - postgres
+  - vllm

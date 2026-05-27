@@ -1,0 +1,26 @@
+{{- if .Values.monitoring.serviceMonitor.enabled -}}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "querymind.fullname" . }}-backend
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "querymind.labels" . | nindent 4 }}
+    app.kubernetes.io/component: monitoring
+    {{- with .Values.monitoring.serviceMonitor.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  selector:
+    matchLabels:
+      {{- include "querymind.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: backend
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ .Values.monitoring.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.monitoring.serviceMonitor.scrapeTimeout }}
+{{- end -}}

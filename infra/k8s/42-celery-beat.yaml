@@ -1,0 +1,52 @@
+# QueryMind AI — Celery Beat (scheduler).
+#
+# Exactly one replica. Beat owns the daily RAG diff schedule
+# (RAG_DIFF_CHECK_HOUR_UTC); running two replicas would double-fire every
+# task. Resources are tiny — beat doesn't execute tasks, it just enqueues
+# them.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: celery-beat
+  namespace: querymind
+  labels:
+    app.kubernetes.io/name: querymind
+    app.kubernetes.io/component: celery-beat
+    app.kubernetes.io/version: "0.1.0"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: querymind
+      app.kubernetes.io/component: celery-beat
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: querymind
+        app.kubernetes.io/component: celery-beat
+        app.kubernetes.io/version: "0.1.0"
+    spec:
+      containers:
+        - name: celery-beat
+          image: querymind/backend:0.1.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - celery
+            - -A
+            - app.workers.celery_app:celery_app
+            - beat
+            - --loglevel=info
+          envFrom:
+            - configMapRef:
+                name: querymind-config
+            - secretRef:
+                name: querymind-secrets
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"

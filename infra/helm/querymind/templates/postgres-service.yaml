@@ -1,0 +1,19 @@
+{{- if .Values.postgres.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "querymind.fullname" . }}-postgres
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "querymind.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  clusterIP: None
+  ports:
+    - name: postgres
+      port: {{ .Values.postgres.service.port }}
+      targetPort: 5432
+  selector:
+    {{- include "querymind.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+{{- end -}}

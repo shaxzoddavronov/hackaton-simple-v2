@@ -1,0 +1,35 @@
+# QueryMind AI — non-secret runtime configuration.
+#
+# Backend, worker, and beat pods load these as env vars via `envFrom`.
+# All values are safe to commit; only the Secret holds credentials.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: querymind-config
+  namespace: querymind
+  labels:
+    app.kubernetes.io/name: querymind
+    app.kubernetes.io/component: config
+    app.kubernetes.io/version: "0.1.0"
+data:
+  QM_ENVIRONMENT: "production"
+  # vLLM — hosted on a GPU node (in or out of cluster). The :8000/v1
+  # path is the OpenAI-compatible endpoint shape.
+  VLLM_ENDPOINT: "http://vllm.querymind.svc.cluster.local:8000/v1"
+  VLLM_MODEL: "google/gemma-3-4b-it"
+  # Triton — bge-m3 embeddings (1024d). Leave empty to disable RAG entirely
+  # and force BM25 fallback.
+  TRITON_URL: "http://triton.querymind.svc.cluster.local:8001"
+  TRITON_EMBED_MODEL: "bge_m3"
+  EMBEDDING_DIM: "1024"
+  # Comma-separated allowed origins for the frontend. Tighten in prod.
+  CORS_ORIGINS: "https://querymind.example.com"
+  # Agent / RAG behaviour.
+  RAG_TOP_K: "12"
+  RAG_DIFF_CHECK_HOUR_UTC: "0"
+  # slowapi storage URI. Defaults to redis db=1 to keep counters off the
+  # Celery broker (db=0).
+  RATE_LIMIT_STORAGE_URL: "redis://redis.querymind.svc.cluster.local:6379/1"
+  # Frontend public env (Next.js requires NEXT_PUBLIC_ prefix to expose at
+  # build time; this is the runtime fallback for SSR).
+  NEXT_PUBLIC_API_BASE_URL: "https://querymind.example.com/api"

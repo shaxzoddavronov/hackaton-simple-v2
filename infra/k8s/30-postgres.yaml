@@ -1,0 +1,122 @@
+# QueryMind AI — metadata Postgres (pgvector enabled).
+#
+# Single-replica StatefulSet. The image already contains the `vector`
+# extension required by the RAG layer (rag_chunks.embedding column).
+# pgcrypto bootstrap is mounted from a ConfigMap so Alembic migrations
+# that use gen_random_uuid() work on first boot.
+#
+# Credentials are sourced from `querymind-secrets`. DATABASE_URL in the
+# Secret MUST point at this Service's DNS name.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: querymind
+  labels:
+    app.kubernetes.io/name: querymind
+    app.kubernetes.io/component: postgres
+    app.kubernetes.io/version: "0.1.0"
+data:
+  01-pgcrypto.sql: |
+    CREATE EXTENSION IF NOT EXISTS pgcrypto;
+    CREATE EXTENSION IF NOT EXISTS vector;
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: querymind
+  labels:
+    app.kubernetes.io/name: querymind
+    app.kubernetes.io/component: postgres
+    app.kubernetes.io/version: "0.1.0"
+spec:
+  clusterIP: None
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432
+  selector:
+    app.kubernetes.io/name: querymind
+    app.kubernetes.io/component: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: querymind
+  labels:
+    app.kubernetes.io/name: querymind
+    app.kubernetes.io/component: postgres
+    app.kubernetes.io/version: "0.1.0"
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: querymind
+      app.kubernetes.io/component: postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: querymind
+        app.kubernetes.io/component: postgres
+        app.kubernetes.io/version: "0.1.0"
+    spec:
+      containers:
+        - name: postgres
+          image: pgvector/pgvector:pg16
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: querymind
+            - name: POSTGRES_USER
+              value: querymind
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: querymind-secrets
+                  key: POSTGRES_PASSWORD
+                  optional: true
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "querymind", "-d", "querymind"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "querymind", "-d", "querymind"]
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+      volumes:
+        - name: init
+          configMap:
+            name: postgres-init
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app.kubernetes.io/name: querymind
+          app.kubernetes.io/component: postgres
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 20Gi

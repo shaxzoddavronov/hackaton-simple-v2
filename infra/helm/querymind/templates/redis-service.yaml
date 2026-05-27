@@ -1,0 +1,18 @@
+{{- if .Values.redis.enabled -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "querymind.fullname" . }}-redis
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "querymind.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  ports:
+    - name: redis
+      port: {{ .Values.redis.service.port }}
+      targetPort: 6379
+  selector:
+    {{- include "querymind.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+{{- end -}}

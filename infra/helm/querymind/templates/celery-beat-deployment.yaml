@@ -1,0 +1,45 @@
+{{- if .Values.beat.enabled -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "querymind.fullname" . }}-celery-beat
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "querymind.labels" . | nindent 4 }}
+    app.kubernetes.io/component: celery-beat
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "querymind.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: celery-beat
+  template:
+    metadata:
+      labels:
+        {{- include "querymind.labels" . | nindent 8 }}
+        app.kubernetes.io/component: celery-beat
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: celery-beat
+          image: "{{ .Values.image.backend.repository }}:{{ .Values.image.backend.tag }}"
+          imagePullPolicy: {{ .Values.image.backend.pullPolicy }}
+          command:
+            - celery
+            - -A
+            - app.workers.celery_app:celery_app
+            - beat
+            - --loglevel=info
+          envFrom:
+            - configMapRef:
+                name: {{ include "querymind.fullname" . }}-config
+            - secretRef:
+                name: {{ include "querymind.fullname" . }}-secrets
+          resources:
+            {{- toYaml .Values.beat.resources | nindent 12 }}
+{{- end -}}

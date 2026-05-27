@@ -1,0 +1,12 @@
+# QueryMind AI — dedicated namespace.
+#
+# Apply this first; every other manifest in this directory is namespaced
+# to `querymind`.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: querymind
+  labels:
+    app.kubernetes.io/name: querymind
+    app.kubernetes.io/component: namespace
+    app.kubernetes.io/version: "0.1.0"

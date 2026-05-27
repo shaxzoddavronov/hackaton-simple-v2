@@ -1,0 +1,83 @@
+# QueryMind AI — FastAPI backend.
+#
+# Two replicas behind a ClusterIP Service. Container loads both the
+# ConfigMap (non-secret) and the Secret (credentials) via envFrom.
+#
+# Liveness probe is intentionally generous: the agent graph can do
+# long-running SQL execution and we don't want Kubernetes to OOM-kick a
+# pod that's mid-query. Readiness fails fast so traffic doesn't hit a
+# pod before its DB pool warms up.
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: querymind
+  labels:
+    app.kubernetes.io/name: querymind
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/version: "0.1.0"
+spec:
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+  selector:
+    app.kubernetes.io/name: querymind
+    app.kubernetes.io/component: backend
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: querymind
+  labels:
+    app.kubernetes.io/name: querymind
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/version: "0.1.0"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: querymind
+      app.kubernetes.io/component: backend
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: querymind
+        app.kubernetes.io/component: backend
+        app.kubernetes.io/version: "0.1.0"
+    spec:
+      containers:
+        - name: backend
+          image: querymind/backend:0.1.0
+          imagePullPolicy: IfNotPresent
+          command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: querymind-config
+            - secretRef:
+                name: querymind-secrets
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
