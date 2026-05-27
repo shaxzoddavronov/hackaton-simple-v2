@@ -244,6 +244,10 @@ export default function ChatPage() {
 
     let finalSpec: UISpec | null = null;
     let finalSql: string | null = null;
+    let finalSubResults: Record<
+      string,
+      { columns: string[]; row_count: number }
+    > | null = null;
     let assistantId = crypto.randomUUID();
     let newlyCreatedSessionId: string | null = null;
 
@@ -270,9 +274,18 @@ export default function ChatPage() {
               ui_spec?: UISpec | null;
               sql?: string | null;
               assistant_message_id?: string;
+              sub_results?: Record<
+                string,
+                { columns: string[]; row_count: number }
+              > | null;
             };
             finalSpec = d.ui_spec ?? null;
             finalSql = d.sql ?? null;
+            // Federated turns carry per-sub-query breakdown; single-DB
+            // turns return {} which we treat as absent.
+            if (d.sub_results && Object.keys(d.sub_results).length > 0) {
+              finalSubResults = d.sub_results;
+            }
             if (d.assistant_message_id) assistantId = d.assistant_message_id;
           } else if (evt.event === "error") {
             const d = evt.data as { message?: string };
@@ -299,6 +312,7 @@ export default function ChatPage() {
           content: "",
           ui_spec: finalSpec,
           sql: finalSql,
+          sub_results: finalSubResults,
         },
       ]);
       // After the first message of a brand-new session, sync the URL

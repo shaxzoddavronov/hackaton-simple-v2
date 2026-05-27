@@ -61,8 +61,9 @@ export default function ConnectionSchemaPage() {
     )
       .then((d) => {
         setData(d);
-        if (d.bundle?.tables.length) {
-          setSelected(`${d.bundle.tables[0].schema}.${d.bundle.tables[0].name}`);
+        const first = d.bundle?.tables?.[0];
+        if (first) {
+          setSelected(`${first.schema}.${first.name}`);
         }
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"));
