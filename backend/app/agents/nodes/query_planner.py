@@ -174,6 +174,65 @@ _ES_SYSTEM = (
     "rationale."
 )
 
+_MONGO_SYSTEM = (
+    "You are a MongoDB query planner for a strict READ-ONLY analytics "
+    "tool. Generate exactly ONE aggregation pipeline against a single "
+    "collection that answers the user's question.\n"
+    "\n"
+    "Output contract — IMPORTANT:\n"
+    "  The `sql` field of your SqlPlan must be a JSON ENVELOPE STRING "
+    "with this shape:\n"
+    '    {"database": "<db>", "collection": "<coll>", "pipeline": [...]}\n'
+    "  The `dialect` field must be exactly \"mongodb\".\n"
+    "  Because `sql` is a JSON string field, every double quote inside "
+    "your envelope must be backslash-escaped — your final SqlPlan JSON "
+    "will contain the envelope as a quoted string.\n"
+    "\n"
+    "Rules — HARD REJECTS (the validator will refuse the plan):\n"
+    "  * NEVER include $out or $merge — those are write stages.\n"
+    "  * NEVER include $function, $accumulator, or $where — those run "
+    "arbitrary JavaScript and are banned wholesale.\n"
+    "  * NEVER touch the 'admin', 'config', or 'local' databases or "
+    "any collection starting with 'system.'.\n"
+    "  * Allowed pipeline stages: $match, $group, $project, $sort, "
+    "$limit, $skip, $count, $unwind, $lookup (NO sub-pipeline writes), "
+    "$facet, $bucket, $bucketAuto, $addFields, $set, $replaceRoot, "
+    "$replaceWith, $sortByCount, $redact, $densify, $fill. Any other "
+    "stage is rejected.\n"
+    "  * Reference ONLY collections and fields that appear in the schema.\n"
+    "\n"
+    "Time-window parsing — same as for SQL/ES. Translate natural-language "
+    "phrases into a $match stage using BSON extended JSON for dates:\n"
+    "    'uch oylik' / 'last 3 months' →\n"
+    '       {"$match":{"<date_field>":{"$gte":{"$date":"<ISO 3 months ago>"}}}}\n'
+    "    'shu oy' / 'this month' →\n"
+    '       {"$match":{"<date_field>":{"$gte":{"$date":"<start of month ISO>"}}}}\n"
+    "  Pick the most plausible date field from the schema (created_at, "
+    "createdAt, timestamp, etc.). If the user gave NO time hint, omit "
+    "the filter.\n"
+    "\n"
+    "Aggregation patterns:\n"
+    "  * 'how many X' → [{\"$match\":...}, {\"$count\":\"count\"}].\n"
+    "  * 'top N by Y' →\n"
+    '       [{"$group":{"_id":"$<group_field>","total":{"$sum":"$<Y>"}}},\n'
+    '        {"$sort":{"total":-1}}, {"$limit": N}].\n'
+    "  * 'trend over time' → $group on a date trunc via $dateTrunc:\n"
+    '       {"$group":{"_id":{"$dateTrunc":{"date":"$created_at","unit":"month"}},'
+    '"total":{"$sum":"$amount"}}}\n'
+    "    then $sort: {_id: 1}.\n"
+    "\n"
+    "Example — 'top 5 customers by total revenue this month' over\n"
+    "  database 'shop', collection 'orders' with fields customer, amount, "
+    "ordered_at:\n"
+    '    {"database":"shop","collection":"orders","pipeline":'
+    '[{"$match":{"ordered_at":{"$gte":{"$date":"2026-05-01T00:00:00Z"}}}},'
+    '{"$group":{"_id":"$customer","total":{"$sum":"$amount"}}},'
+    '{"$sort":{"total":-1}},{"$limit":5}]}\n'
+    "\n"
+    "Plan ONE pipeline only. If the schema cannot answer the question, "
+    "write the closest meaningful aggregation and explain in the rationale."
+)
+
 _MAX_RAG_CHARS = 1800
 
 
@@ -251,8 +310,16 @@ async def run(state: GraphState) -> GraphState:
     # share the SqlPlan output shape ``{sql, dialect, rationale, …}``;
     # Elasticsearch reuses the same shape but the `sql` field holds a
     # JSON envelope string (see _ES_SYSTEM).
-    is_es = bundle is not None and bundle.dialect == "elasticsearch"
-    system_prompt = _ES_SYSTEM if is_es else _SQL_SYSTEM
+    # Dispatch by connection language. SQL dialects share the same
+    # planner prompt; ES and MongoDB each have their own because the
+    # output language (JSON envelopes vs SQL) differs.
+    dialect = bundle.dialect if bundle is not None else None
+    if dialect == "elasticsearch":
+        system_prompt = _ES_SYSTEM
+    elif dialect == "mongodb":
+        system_prompt = _MONGO_SYSTEM
+    else:
+        system_prompt = _SQL_SYSTEM
 
     prompt_user = (
         f"Question: {state.get('user_message','')}\n\n"

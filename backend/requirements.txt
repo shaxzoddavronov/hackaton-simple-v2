@@ -12,6 +12,7 @@ asyncpg
 aiosqlite
 asyncmy>=0.2.9
 clickhouse-connect>=0.7
+motor>=3.5
 alembic
 
 # Config / validation

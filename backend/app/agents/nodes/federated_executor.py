@@ -43,6 +43,7 @@ from app.engines.base import ResultSet
 from app.engines.registry import get_engine
 from app.services import crypto
 from app.services.es_readonly_validator import validate_es_query
+from app.services.mongo_readonly_validator import validate_mongo_query
 from app.services.federation_merge import MergeError, execute_merge_pipeline
 from app.services.readonly_validator import validate_readonly
 
@@ -93,6 +94,8 @@ async def _run_one(
     # Dialect-dispatched validation. SQL uses sqlglot; ES uses JSON DSL.
     if dialect == "elasticsearch":
         result, _ = validate_es_query(query)
+    elif dialect == "mongodb":
+        result, _ = validate_mongo_query(query)
     else:
         result = validate_readonly(query, dialect=dialect)
     if not result.ok:
