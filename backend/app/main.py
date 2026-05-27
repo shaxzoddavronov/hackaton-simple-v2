@@ -46,11 +46,43 @@ register_engines()
 logger = logging.getLogger("querymind.main")
 
 
+# Sentinels for the insecure-default check below. Keep these in sync
+# with Settings field defaults in app/config.py.
+_INSECURE_JWT = "dev-insecure-change-me"
+_INSECURE_MASTER = "REPLACE_WITH_BASE64_32_BYTE_KEY"
+
+
+def _check_secrets() -> None:
+    """Refuse to boot a production server with dev-default secrets.
+
+    In dev / test we just log a one-line WARNING so test fixtures keep
+    working without ceremony. In production we raise — the lifespan
+    exception propagates and uvicorn refuses to serve traffic.
+    """
+    insecure: list[str] = []
+    if settings.JWT_SECRET == _INSECURE_JWT or len(settings.JWT_SECRET) < 16:
+        insecure.append("JWT_SECRET")
+    if settings.QM_MASTER_KEY == _INSECURE_MASTER or not settings.QM_MASTER_KEY:
+        insecure.append("QM_MASTER_KEY")
+    if not insecure:
+        return
+    msg = (
+        f"Insecure default secret(s) in use: {', '.join(insecure)}. "
+        "Generate proper values per backend/.env.example."
+    )
+    if settings.QM_ENVIRONMENT.lower() in {"prod", "production"}:
+        raise RuntimeError(
+            f"Refusing to start in production: {msg}"
+        )
+    logger.warning("DEV MODE: %s", msg)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Startup / shutdown hooks.
 
     Startup:
+      * Verify production secrets aren't the insecure dev defaults.
       * Touch the metadata-DB engine pool so misconfiguration fails fast
         (instead of on the first request).
       * Ping the local vLLM server. We *warn* on failure rather than
@@ -61,6 +93,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
       * Dispose of the async engine so connection-pool sockets close
         cleanly.
     """
+    _check_secrets()
     # `engine` is already created at import time; this is a no-op check
     # that the URL parsed cleanly and the dialect driver imported.
     _ = engine.url

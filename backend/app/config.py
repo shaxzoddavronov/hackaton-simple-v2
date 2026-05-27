@@ -35,6 +35,13 @@ class Settings(BaseSettings):
     # --- Broker / cache ----------------------------------------------------------
     REDIS_URL: str = Field(default="redis://localhost:6379/0")
 
+    # --- Environment ------------------------------------------------------------
+    # Set QM_ENVIRONMENT=production in deployments. The lifespan hook in
+    # main.py fail-fasts on insecure defaults (JWT_SECRET / QM_MASTER_KEY)
+    # only when this is "production". Dev / test leave the defaults alone
+    # so unit tests don't need ceremony.
+    QM_ENVIRONMENT: str = Field(default="dev")
+
     # --- Auth --------------------------------------------------------------------
     JWT_SECRET: str = Field(default="dev-insecure-change-me")
     JWT_ALG: str = Field(default="HS256")

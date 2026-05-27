@@ -44,6 +44,36 @@ def _sse(event: str, data: dict[str, Any]) -> bytes:
     return f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n".encode("utf-8")
 
 
+def _sanitize_error_for_client(exc: Exception, trace: str) -> str:
+    """Strip internal details out of an SSE error payload.
+
+    Raw exceptions leak SQL, connection strings, stack-trace cues, and
+    sometimes credentials (an asyncpg auth error includes the user
+    name). The server still logs the full traceback under the same
+    trace id, so support can correlate.
+
+    Heuristic by exception type:
+      * ``ValueError`` raised by our own engine guard (message starts
+        with "Refusing to execute") is already user-friendly — pass
+        through as-is.
+      * Async-DB / driver errors → generic "data source error".
+      * Anything else → generic "internal error".
+    """
+    msg = str(exc) or exc.__class__.__name__
+    if isinstance(exc, ValueError) and msg.startswith("Refusing to execute"):
+        return msg
+    cls = type(exc).__name__
+    if cls in {"ProgrammingError", "OperationalError", "IntegrityError",
+               "InterfaceError", "DatabaseError", "InvalidTextRepresentation"}:
+        return f"Data source error (request_id={trace})"
+    if cls in {"APIError", "APIConnectionError", "APIStatusError",
+               "AuthenticationError", "RateLimitError", "Timeout"}:
+        return f"AI service error (request_id={trace})"
+    if cls == "ValidationError":  # pydantic
+        return f"AI returned malformed output (request_id={trace})"
+    return f"Internal error (request_id={trace})"
+
+
 async def _resolve_or_workspace_id(
     session: AsyncSession, user: User, payload: ChatRequest
 ) -> UUID | None:
@@ -191,7 +221,10 @@ async def post_chat(
                             final_state[k] = v
         except Exception as exc:
             log.exception("[%s] graph invocation failed", trace)
-            yield _sse("error", {"message": str(exc)})
+            yield _sse(
+                "error",
+                {"message": _sanitize_error_for_client(exc, trace)},
+            )
             return
 
         ui_spec = final_state.get("ui_spec")
