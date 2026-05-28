@@ -180,17 +180,17 @@ async def reindex_harvested_source(
 
     vectors = await _embed_batched(all_chunks)
     for c, vec in zip(all_chunks, vectors):
-        session.add(
-            RagChunk(
-                workspace_id=workspace_id,
-                document_id=None,
-                kind=c.kind,
-                source_key=c.source_key,
-                chunk_text=c.text,
-                embedding=_embedding_for_storage(session, vec),
-                chunk_metadata=c.metadata,
-                content_hash=c.content_hash,
-            )
+        await _insert_chunk(
+            session,
+            workspace_id=workspace_id,
+            connection_id=None,
+            document_id=None,
+            kind=c.kind,
+            source_key=c.source_key,
+            chunk_text_value=c.text,
+            embedding_storage=_embedding_for_storage(session, vec),
+            metadata=c.metadata,
+            content_hash=c.content_hash,
         )
     await session.commit()
     return {
@@ -278,23 +278,38 @@ async def _upsert_chunks(
         prev = existing.get((c.kind, c.source_key))
         emb_storage = _embedding_for_storage(session, vec)
         if prev is None:
-            row = RagChunk(
+            await _insert_chunk(
+                session,
                 workspace_id=workspace_id,
                 connection_id=connection_id,
                 document_id=document_id,
                 kind=c.kind,
                 source_key=c.source_key,
-                chunk_text=c.text,
-                embedding=emb_storage,
-                chunk_metadata=c.metadata,
+                chunk_text_value=c.text,
+                embedding_storage=emb_storage,
+                metadata=c.metadata,
                 content_hash=c.content_hash,
             )
-            session.add(row)
         else:
+            # ``CAST(:e AS vector)`` coerces the varchar literal into
+            # pgvector; ``CAST(:m AS jsonb)`` does the same for the
+            # metadata jsonb column. We can't use the ``::`` shorthand
+            # — SQLAlchemy's parameter parser eats double colons and
+            # complains about an unknown bind. On SQLite the columns
+            # are JSON / TEXT, so we keep the bare placeholders.
+            if _is_postgres(session):
+                emb_expr = "CAST(:e AS vector)"
+                meta_expr = "CAST(:m AS jsonb)"
+                meta_value: Any = json.dumps(c.metadata)
+            else:
+                emb_expr = ":e"
+                meta_expr = ":m"
+                meta_value = _jsonify(session, c.metadata)
             await session.execute(
                 text(
-                    "UPDATE rag_chunks SET text=:t, embedding=:e, "
-                    "chunk_metadata=:m, content_hash=:h "
+                    "UPDATE rag_chunks SET text=:t, "
+                    f"embedding={emb_expr}, "
+                    f"chunk_metadata={meta_expr}, content_hash=:h "
                     "WHERE id=:id"
                 ).bindparams(
                     bindparam("e", type_=_embedding_bind_type(session))
@@ -302,7 +317,7 @@ async def _upsert_chunks(
                 {
                     "t": c.text,
                     "e": emb_storage,
-                    "m": _jsonify(session, c.metadata),
+                    "m": meta_value,
                     "h": c.content_hash,
                     "id": prev["id"],
                 },
@@ -337,17 +352,17 @@ async def _upsert_chunks_for_document(
     )
     vectors = await _embed_batched(chunks)
     for c, vec in zip(chunks, vectors):
-        session.add(
-            RagChunk(
-                workspace_id=workspace_id,
-                document_id=document_id,
-                kind=c.kind,
-                source_key=c.source_key,
-                chunk_text=c.text,
-                embedding=_embedding_for_storage(session, vec),
-                chunk_metadata=c.metadata,
-                content_hash=c.content_hash,
-            )
+        await _insert_chunk(
+            session,
+            workspace_id=workspace_id,
+            connection_id=None,
+            document_id=document_id,
+            kind=c.kind,
+            source_key=c.source_key,
+            chunk_text_value=c.text,
+            embedding_storage=_embedding_for_storage(session, vec),
+            metadata=c.metadata,
+            content_hash=c.content_hash,
         )
     return {"upserted": len(chunks), "skipped": 0, "removed": 0}
 
@@ -418,6 +433,91 @@ async def _embed_batched(chunks: Sequence[Chunk]) -> list[list[float]]:
 
 def _is_postgres(session: AsyncSession) -> bool:
     return session.bind is not None and session.bind.dialect.name == "postgresql"
+
+
+async def _insert_chunk(
+    session: AsyncSession,
+    *,
+    workspace_id: UUID | None,
+    connection_id: UUID | None,
+    document_id: UUID | None,
+    kind: str,
+    source_key: str,
+    chunk_text_value: str,
+    embedding_storage: Any,
+    metadata: dict[str, Any],
+    content_hash: str,
+) -> None:
+    """Insert one ``rag_chunks`` row.
+
+    On Postgres the ``embedding`` column is ``vector(1024)`` (pgvector)
+    but the SQLAlchemy ORM column is declared as ``JSONType`` so the
+    same model serves SQLite unit tests. The ORM would therefore try
+    to send the ``"[0.1,0.2,...]"`` pgvector literal as JSONB, which
+    Postgres rejects with ``column "embedding" is of type vector but
+    expression is of type jsonb``. We bypass the type coercion by
+    issuing a raw INSERT with an explicit ``String`` bind on the
+    embedding parameter — same pattern the UPDATE path uses in
+    :func:`_upsert_chunks`.
+
+    On SQLite the JSON variant accepts a Python list directly, so we
+    fall back to ``session.add(RagChunk(...))`` which keeps tests
+    simple and avoids hand-rolled JSON serialization for the JSON
+    column.
+    """
+    if _is_postgres(session):
+        # ``CAST(:embedding AS vector)`` instead of ``:embedding::vector``
+        # — SQLAlchemy's parameter parser sees the double colon as a
+        # separator and complains about an unknown ``:vector`` bind.
+        # The standard SQL CAST form sidesteps the parser quirk and
+        # produces the same pgvector coercion.
+        # On raw text() queries asyncpg only sees the binding *value*
+        # — it cannot derive the column type, so a Python ``dict`` for
+        # the jsonb column fails with "'dict' object has no attribute
+        # 'encode'". We serialize to JSON ourselves and let pgsql cast
+        # it back via ``CAST(:metadata AS jsonb)``. Same trick for the
+        # vector column (see the embedding cast above).
+        await session.execute(
+            text(
+                "INSERT INTO rag_chunks ("
+                " workspace_id, connection_id, document_id, "
+                " kind, source_key, text, embedding, "
+                " chunk_metadata, content_hash"
+                ") VALUES ("
+                " :workspace_id, :connection_id, :document_id, "
+                " :kind, :source_key, :chunk_text, "
+                " CAST(:embedding AS vector), "
+                " CAST(:metadata AS jsonb), :content_hash"
+                ")"
+            ).bindparams(
+                bindparam("embedding", type_=_embedding_bind_type(session))
+            ),
+            {
+                "workspace_id": workspace_id,
+                "connection_id": connection_id,
+                "document_id": document_id,
+                "kind": kind,
+                "source_key": source_key,
+                "chunk_text": chunk_text_value,
+                "embedding": embedding_storage,
+                "metadata": json.dumps(metadata),
+                "content_hash": content_hash,
+            },
+        )
+    else:
+        session.add(
+            RagChunk(
+                workspace_id=workspace_id,
+                connection_id=connection_id,
+                document_id=document_id,
+                kind=kind,
+                source_key=source_key,
+                chunk_text=chunk_text_value,
+                embedding=embedding_storage,
+                chunk_metadata=metadata,
+                content_hash=content_hash,
+            )
+        )
 
 
 def _embedding_for_storage(session: AsyncSession, vec: list[float]) -> Any:

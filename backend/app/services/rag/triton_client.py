@@ -89,8 +89,15 @@ class TritonEmbeddingClient:
         self._version = version
         self._timeout_s = timeout_s
         self._dim = dim
-        self._client: httpx.AsyncClient | None = None
-        self._lock = asyncio.Lock()
+        # NO httpx client cache. Celery's solo pool runs each task in its
+        # own ``asyncio.run(...)`` which closes the loop on exit. Any
+        # objects bound to that loop (httpx.AsyncClient's connection
+        # pool, the asyncio.Lock we used to guard the cache) became
+        # orphaned and silently swallowed the next task's POST as a
+        # 30 s timeout with an empty error message. The fix is to
+        # create a fresh httpx.AsyncClient per embed() call — the
+        # per-request setup cost is negligible (~1 ms) compared to
+        # the actual encode pass (~4 s for a batch of 32 on CPU).
         self._headers: dict[str, str] = {}
         if api_key:
             # ``Bearer <token>`` for NIM/ingress, ``<token>`` for ``x-api-key``-
@@ -110,20 +117,12 @@ class TritonEmbeddingClient:
     def enabled(self) -> bool:
         return bool(self._base_url)
 
-    async def _ensure_client(self) -> httpx.AsyncClient:
-        if self._client is None:
-            async with self._lock:
-                if self._client is None:
-                    self._client = httpx.AsyncClient(
-                        timeout=self._timeout_s,
-                        headers=self._headers or None,
-                    )
-        return self._client
-
     async def aclose(self) -> None:
-        if self._client is not None:
-            await self._client.aclose()
-            self._client = None
+        # No-op: we no longer cache an httpx client between calls.
+        # Kept for API compatibility with callers that expect the
+        # method to exist (the agent's federated executor uses the
+        # same pattern across engines).
+        return None
 
     def _url(self) -> str:
         if self._version:
@@ -152,11 +151,21 @@ class TritonEmbeddingClient:
                 }
             ]
         }
-        client = await self._ensure_client()
+        # Fresh httpx client per call — see __init__ for why. The
+        # async with block guarantees the connection is closed before
+        # the surrounding asyncio loop exits, so Celery's solo pool
+        # never sees a half-open socket carrying over to the next
+        # task.
         try:
-            resp = await client.post(self._url(), json=payload)
+            async with httpx.AsyncClient(
+                timeout=self._timeout_s,
+                headers=self._headers or None,
+            ) as client:
+                resp = await client.post(self._url(), json=payload)
         except (httpx.ConnectError, httpx.ReadError, httpx.TimeoutException) as e:
-            raise TritonUnavailable(f"Triton unreachable: {e}") from e
+            raise TritonUnavailable(
+                f"Triton unreachable: {type(e).__name__}: {e or '(no message)'}"
+            ) from e
 
         if resp.status_code != 200:
             raise TritonError(
