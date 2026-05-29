@@ -163,7 +163,13 @@ export async function deleteConnection(
 
 // ── Document sources (Phase 14) ──
 
-export type DocSourceKind = "folder" | "url_list" | "db_column";
+export type DocSourceKind =
+  | "folder"
+  | "url_list"
+  | "db_column"
+  | "smb"
+  | "gdrive"
+  | "onedrive";
 export type DocSourceStatus = "idle" | "harvesting" | "ready" | "error";
 
 export type DocSource = {

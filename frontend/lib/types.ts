@@ -72,6 +72,17 @@ export type SubResultSummary = {
   row_count: number;
 };
 
+export type DbRowLink = {
+  connection_id: string;
+  table: string;
+  // PK col → value (composite keys supported). May be empty when the
+  // source table had no PK in the profiled schema bundle.
+  row_pk: Record<string, string | number | boolean | null>;
+  file_column: string;
+  file_reference: string;
+  extras?: Record<string, string | number | boolean | null>;
+};
+
 export type Citation = {
   kind: "user_doc" | "harvested_doc";
   source_id: string;
@@ -79,6 +90,10 @@ export type Citation = {
   snippet: string;
   chunk_index: number;
   source_key: string;
+  // Phase 17.1 — when the chunk came from a db_column source, this
+  // field links back to the originating DB row so the UI can render
+  // "policy.pdf from tickets where id=42".
+  db_row?: DbRowLink;
 };
 
 export type ChatMessage = {

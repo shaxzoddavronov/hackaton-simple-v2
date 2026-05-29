@@ -126,13 +126,23 @@ async def reindex_harvested_source(
     workspace_id: UUID,
     files_iter,
 ) -> dict[str, int]:
-    """Drain ``files_iter`` of ``(filename, text)`` tuples, embed them
-    into ``rag_chunks`` with ``kind='harvested_doc'`` scoped to the
-    workspace, and drop chunks for files no longer present.
+    """Drain ``files_iter`` and embed extracted chunks into
+    ``rag_chunks`` with ``kind='harvested_doc'`` scoped to the
+    workspace; drop chunks for files no longer present.
 
-    ``files_iter`` is provided by the caller (the Celery harvest task)
-    so the indexer doesn't need to know about the three crawl strategies
-    in :mod:`services.doc_harvest`. The iterator may be sync or async.
+    Each yielded item from ``files_iter`` is either a 2-tuple
+    ``(filename, text)`` (folder / url_list / smb / gdrive / onedrive
+    sources — no row context to attach) or a 3-tuple
+    ``(filename, text, extra_metadata: dict)`` (db_column source —
+    Phase 17.1 attaches the source table + row PK so the answer
+    writer can cite the originating DB row alongside the file).
+
+    The extra_metadata dict, when present, is merged into the chunk's
+    metadata field — chunk_harvested_doc preserves a stable shape with
+    the harvested-source identifiers, and any caller-supplied keys
+    (``db_row``, ``table``, ``connection_id``, etc.) ride along.
+
+    ``files_iter`` may be a sync or async iterator.
     """
     from app.services.rag.chunking import chunk_harvested_doc
 
@@ -140,21 +150,37 @@ async def reindex_harvested_source(
     docs_seen = 0
     source_prefix = f"docsource:{source_id}:"
 
+    def _unpack(item):
+        # Tolerant unpack: 2-tuple → (name, text, None); 3-tuple →
+        # (name, text, extra_metadata). Anything else is a programmer
+        # error and should fail loudly.
+        if len(item) == 2:
+            return item[0], item[1], None
+        if len(item) == 3:
+            return item[0], item[1], item[2]
+        raise ValueError(
+            f"files_iter item must be a 2- or 3-tuple, got {len(item)}-tuple"
+        )
+
     async def _consume(it) -> None:
         nonlocal docs_seen
         # Accept both sync iterators (lists, generators) and async ones.
         if hasattr(it, "__aiter__"):
-            async for fname, text_ in it:
+            async for item in it:
+                fname, text_, extra = _unpack(item)
                 chunks = chunk_harvested_doc(
                     str(source_id), fname, text_,
+                    extra_metadata=extra,
                 )
                 if chunks:
                     docs_seen += 1
                     all_chunks.extend(chunks)
         else:
-            for fname, text_ in it:
+            for item in it:
+                fname, text_, extra = _unpack(item)
                 chunks = chunk_harvested_doc(
                     str(source_id), fname, text_,
+                    extra_metadata=extra,
                 )
                 if chunks:
                     docs_seen += 1

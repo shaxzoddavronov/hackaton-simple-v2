@@ -51,31 +51,58 @@ function CitationsList({
         </span>
       </summary>
       <ol className="mt-2 space-y-2">
-        {citations.map((c, i) => (
-          <li
-            key={c.source_key}
-            className="rounded-xl border border-outline/20 bg-surface-container-high/30 px-3 py-2"
-          >
-            <div className="flex items-baseline gap-2">
-              <span className="text-xs font-mono text-primary">
-                [{i + 1}]
-              </span>
-              <span className="font-semibold text-on-surface text-sm">
-                {c.filename}
-              </span>
-              <span className="text-xs text-on-surface-variant uppercase tracking-wider">
-                {c.kind === "harvested_doc" ? "Harvested" : "Uploaded"}
-                {" · chunk "}
-                {c.chunk_index + 1}
-              </span>
-            </div>
-            {c.snippet ? (
-              <p className="mt-1 text-on-surface-variant text-xs leading-relaxed">
-                {c.snippet}
-              </p>
-            ) : null}
-          </li>
-        ))}
+        {citations.map((c, i) => {
+          const row = c.db_row;
+          const pkPairs = row
+            ? Object.entries(row.row_pk || {})
+                .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
+                .join(", ")
+            : "";
+          return (
+            <li
+              key={c.source_key}
+              className="rounded-xl border border-outline/20 bg-surface-container-high/30 px-3 py-2"
+            >
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <span className="text-xs font-mono text-primary">
+                  [{i + 1}]
+                </span>
+                <span className="font-semibold text-on-surface text-sm">
+                  {c.filename}
+                </span>
+                <span className="text-xs text-on-surface-variant uppercase tracking-wider">
+                  {c.kind === "harvested_doc" ? "Harvested" : "Uploaded"}
+                  {" · chunk "}
+                  {c.chunk_index + 1}
+                </span>
+                {row && row.table ? (
+                  <span className="text-xs font-mono text-tertiary">
+                    ↳ {row.table}
+                    {pkPairs ? ` (${pkPairs})` : ""}
+                  </span>
+                ) : null}
+              </div>
+              {c.snippet ? (
+                <p className="mt-1 text-on-surface-variant text-xs leading-relaxed">
+                  {c.snippet}
+                </p>
+              ) : null}
+              {row && row.extras && Object.keys(row.extras).length > 0 ? (
+                <div className="mt-1 flex flex-wrap gap-2 text-xs text-on-surface-variant">
+                  {Object.entries(row.extras).map(([k, v]) => (
+                    <span
+                      key={k}
+                      className="rounded-full bg-surface-container-high/50 border border-outline/20 px-2 py-0.5"
+                    >
+                      <span className="font-mono">{k}:</span>{" "}
+                      <span>{String(v)}</span>
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+            </li>
+          );
+        })}
       </ol>
     </details>
   );

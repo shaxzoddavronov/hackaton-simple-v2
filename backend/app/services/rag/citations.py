@@ -71,20 +71,45 @@ def build_citations(
             continue
         seen_keys.add(dedupe_key)
 
-        out.append(
-            {
-                "kind": kind,
-                "source_id": (
-                    str(metadata.get("source_id") or "")
-                    if kind == "harvested_doc"
-                    else str(metadata.get("document_id") or "")
-                ),
-                "filename": display,
-                "snippet": _snippet(text),
-                "chunk_index": int(metadata.get("chunk_index") or 0),
-                "source_key": source_key,
+        # Phase 17.1 — when a harvested chunk came from a db_column
+        # source, its metadata carries the originating DB row's PK
+        # and table. Surface that as a separate ``db_row`` field on
+        # the citation so the UI can render "policy.pdf from
+        # tickets.id=42" and the answer writer can cite the link.
+        db_row: dict | None = None
+        if (
+            isinstance(metadata.get("table"), str)
+            and metadata.get("table")
+            and (metadata.get("row_pk") or metadata.get("file_reference"))
+        ):
+            db_row = {
+                "connection_id": str(metadata.get("connection_id") or ""),
+                "table": str(metadata.get("table") or ""),
+                "row_pk": metadata.get("row_pk") or {},
+                "file_column": str(metadata.get("file_column") or ""),
+                "file_reference": str(metadata.get("file_reference") or ""),
             }
-        )
+            # Extras are optional context fields the source operator
+            # asked us to pull alongside the PK (e.g. title, created_at).
+            extras = metadata.get("extras") or {}
+            if isinstance(extras, dict) and extras:
+                db_row["extras"] = extras
+
+        citation = {
+            "kind": kind,
+            "source_id": (
+                str(metadata.get("source_id") or "")
+                if kind == "harvested_doc"
+                else str(metadata.get("document_id") or "")
+            ),
+            "filename": display,
+            "snippet": _snippet(text),
+            "chunk_index": int(metadata.get("chunk_index") or 0),
+            "source_key": source_key,
+        }
+        if db_row is not None:
+            citation["db_row"] = db_row
+        out.append(citation)
         if len(out) >= _MAX_CITATIONS:
             break
 
@@ -101,10 +126,22 @@ def citation_hint_for_planner(citations: list[dict[str, Any]]) -> str:
     """
     if not citations:
         return ""
-    lines = [
-        f"  [{i + 1}] {c['filename']}"
-        for i, c in enumerate(citations)
-    ]
+    lines: list[str] = []
+    for i, c in enumerate(citations):
+        # When the citation came from a db_column source, append the
+        # row linkage so the LLM can say "policy.pdf attached to
+        # tickets.id=42" instead of just "policy.pdf".
+        row = c.get("db_row")
+        if isinstance(row, dict) and row.get("table") and row.get("row_pk"):
+            pk_pairs = ", ".join(
+                f"{k}={v!r}" for k, v in (row.get("row_pk") or {}).items()
+            )
+            lines.append(
+                f"  [{i + 1}] {c['filename']} "
+                f"(from {row['table']} where {pk_pairs})"
+            )
+        else:
+            lines.append(f"  [{i + 1}] {c['filename']}")
     return "Sources retrieved (cite by [number] in body_md):\n" + "\n".join(lines)
 
 

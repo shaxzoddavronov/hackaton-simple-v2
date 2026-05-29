@@ -63,6 +63,22 @@ python-docx>=1.1    # DOCX text extraction
 openpyxl>=3.1       # XLSX text extraction
 beautifulsoup4>=4.12  # HTML cleanup
 
+# Cloud document sources (Phase 17.4 — Google Drive + OneDrive).
+# google-api-python-client pulls google-auth in transitively but we pin
+# both so the resolver is predictable. OneDrive auth + Graph calls go
+# through plain httpx; we deliberately avoid ``msal`` because the
+# device-code flow we use is only three endpoints and msal brings a
+# big broker/cache surface area we don't want.
+google-api-python-client>=2.130
+google-auth>=2.30
+
+# Audio / video transcription (Phase 17.3 — mp3/mp4/m4a/wav/webm/ogg/opus
+# harvest sources). CTranslate2-backed Whisper; much faster than the
+# reference openai-whisper on CPU. Requires ``ffmpeg`` on PATH for
+# non-WAV decoding — install via ``apt-get install ffmpeg`` (Linux)
+# or ``winget install Gyan.FFmpeg`` (Windows).
+faster-whisper>=1.0.3
+
 # Agent orchestration
 langgraph
 langchain-core

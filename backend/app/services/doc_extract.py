@@ -13,6 +13,12 @@ Supported:
   * ``.html``, ``.htm``     — BeautifulSoup, strip <script>/<style>
   * ``.txt``, ``.md``, ``.csv``, ``.tsv``, ``.json``, ``.log``
                             — direct UTF-8 decode (with BOM detection)
+  * ``.mp3``, ``.mp4``, ``.m4a``, ``.wav``, ``.webm``, ``.ogg``,
+    ``.opus``, ``.mpeg``, ``.mpga``
+                            — faster-whisper speech-to-text. Language
+    is auto-detected (Uzbek / Russian / English all work). Requires
+    ``ffmpeg`` on PATH for non-WAV decoding — see
+    ``infra/README.md`` for install notes.
 
 The hard cap on extracted text per file is :data:`MAX_TEXT_BYTES`
 (default 1 MB). Anything beyond is truncated — embedding a 50-page
@@ -28,6 +34,8 @@ from __future__ import annotations
 import io
 import logging
 import os
+import tempfile
+import threading
 from typing import Optional
 
 log = logging.getLogger(__name__)
@@ -43,12 +51,42 @@ _PLAIN_TEXT_EXTS = {
     ".yaml", ".yml", ".sql", ".ini", ".cfg", ".conf",
 }
 
+# Audio/video extensions transcribed with Whisper. ``.mp4`` / ``.webm``
+# may contain video — Whisper (via ffmpeg) just demuxes the audio
+# track. Anything ffmpeg can decode is fair game; this set is the
+# common subset Whisper documents as supported.
+_AUDIO_EXTS = {
+    ".mp3", ".m4a", ".wav", ".webm", ".ogg", ".opus",
+    ".mp4", ".mpeg", ".mpga",
+}
+
 # Extensions where we will produce an extraction. Used by the API
 # layer to allow-list uploads on the source side.
 SUPPORTED_EXTENSIONS = (
     _PLAIN_TEXT_EXTS
     | {".pdf", ".docx", ".xlsx", ".xlsm", ".html", ".htm"}
+    | _AUDIO_EXTS
 )
+
+
+# MIME types for the audio formats we transcribe. ``.mp4`` is reported
+# as ``video/mp4`` because that's its canonical IANA type even though
+# we only look at the audio track.
+_AUDIO_MIME = {
+    ".mp3":  "audio/mpeg",
+    ".mpga": "audio/mpeg",
+    ".mpeg": "audio/mpeg",
+    ".m4a":  "audio/mp4",
+    ".wav":  "audio/wav",
+    ".webm": "audio/webm",
+    ".ogg":  "audio/ogg",
+    ".opus": "audio/opus",
+    ".mp4":  "video/mp4",
+}
+
+
+def _mime_for_audio(ext: str) -> str:
+    return _AUDIO_MIME.get(ext, "application/octet-stream")
 
 
 def ext_of(filename: str) -> str:
@@ -83,6 +121,8 @@ def extract_text(filename: str, data: bytes) -> Optional[tuple[str, str]]:
         return _extract_html(data), "text/html"
     if ext in _PLAIN_TEXT_EXTS:
         return _decode_text(data), "text/plain"
+    if ext in _AUDIO_EXTS:
+        return _extract_audio(filename, data), _mime_for_audio(ext)
     return None
 
 
@@ -195,3 +235,106 @@ def _cap(text: str) -> str:
     # Cut at a UTF-8 boundary to avoid lone surrogates.
     encoded = text.encode("utf-8")[:MAX_TEXT_BYTES]
     return encoded.decode("utf-8", errors="ignore") + "\n[...truncated]"
+
+
+# ── Whisper audio transcription ──────────────────────────────────
+#
+# Loaded lazily on first transcription — most QueryMind processes
+# (API server, scheduler, vLLM client) never see audio, so paying the
+# ~140 MB model download + 200 MB resident memory at import time
+# would be wasteful. The double-checked lock around the singleton is
+# the canonical pattern for "import-once, share-across-threads" in
+# Celery prefork workers where workers fork the parent and inherit
+# its (post-init) module state.
+
+_whisper_model = None
+_whisper_lock = threading.Lock()
+
+
+def _get_whisper():
+    """Return the process-wide ``faster_whisper.WhisperModel`` singleton.
+
+    Size + compute backend are configurable via env so a dev box with a
+    GPU can opt into ``WHISPER_DEVICE=cuda`` / ``WHISPER_COMPUTE_TYPE=float16``
+    without a code change. Defaults target CPU-only QueryMind dev boxes.
+    """
+    global _whisper_model
+    if _whisper_model is None:
+        with _whisper_lock:
+            if _whisper_model is None:
+                from faster_whisper import WhisperModel
+
+                _whisper_model = WhisperModel(
+                    os.environ.get("WHISPER_MODEL_SIZE", "base"),
+                    device=os.environ.get("WHISPER_DEVICE", "cpu"),
+                    compute_type=os.environ.get(
+                        "WHISPER_COMPUTE_TYPE", "int8"
+                    ),
+                )
+    return _whisper_model
+
+
+def _extract_audio(filename: str, data: bytes) -> str:
+    """Transcribe an audio/video file to plain text via faster-whisper.
+
+    The bytes are written to a NamedTemporaryFile because faster-whisper
+    (and the CTranslate2 backend underneath) wants a file path — passing
+    an in-memory BytesIO works for some codecs but not all, and the
+    temp-file path is the documented happy path.
+
+    Language is auto-detected (``language=None``) so Uzbek, Russian,
+    and English clips all transcribe without extra configuration. On
+    a corrupted / silent clip Whisper returns zero segments and we
+    return an empty string rather than raising — the harvester logs
+    the empty result and moves on to the next file.
+    """
+    ext = ext_of(filename) or ".audio"
+    model = _get_whisper()
+
+    # delete=False because on Windows the WhisperModel reopens the path
+    # internally; if the tempfile is still open under us, the second
+    # open fails with PermissionError. We delete in `finally` instead.
+    tmp = tempfile.NamedTemporaryFile(suffix=ext, delete=False)
+    try:
+        tmp.write(data)
+        tmp.flush()
+        tmp.close()
+
+        try:
+            segments, _info = model.transcribe(tmp.name, language=None)
+        except FileNotFoundError as e:
+            # ffmpeg missing on PATH is the most common cause —
+            # faster-whisper invokes ``ffmpeg`` for non-WAV decoding and
+            # Python raises FileNotFoundError when the binary is missing.
+            if "ffmpeg" in str(e).lower():
+                raise RuntimeError(
+                    "ffmpeg not found on PATH — install ffmpeg and "
+                    "restart the Celery worker. Windows: "
+                    "`winget install Gyan.FFmpeg`. Linux: "
+                    "`apt-get install ffmpeg`."
+                ) from e
+            raise
+
+        parts: list[str] = []
+        total = 0
+        for seg in segments:
+            text = (getattr(seg, "text", "") or "").strip()
+            if not text:
+                continue
+            parts.append(text)
+            total += len(text.encode("utf-8")) + 1  # +1 for the space
+            if total > MAX_TEXT_BYTES:
+                # Stop pulling more segments — _cap() will trim cleanly
+                # to a UTF-8 boundary below. A 1-hour meeting transcript
+                # would otherwise sit at ~50 KB which is fine; this guard
+                # is the belt to _cap()'s suspenders.
+                break
+
+        transcript = " ".join(parts).strip()
+        return _cap(transcript)
+    finally:
+        try:
+            os.unlink(tmp.name)
+        except OSError:
+            # Best-effort cleanup; the OS temp sweeper will reclaim it.
+            pass

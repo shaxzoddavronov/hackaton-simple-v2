@@ -39,7 +39,9 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/workspaces", tags=["doc-sources"])
 
 
-SourceKind = Literal["folder", "url_list", "db_column"]
+SourceKind = Literal[
+    "folder", "url_list", "db_column", "smb", "gdrive", "onedrive"
+]
 SourceStatus = Literal["idle", "harvesting", "ready", "error"]
 
 
@@ -120,6 +122,42 @@ def _validate_config(kind: str, config: dict[str, Any]) -> None:
                 status.HTTP_400_BAD_REQUEST,
                 detail="db_column 'connection_id' must be a valid UUID",
             ) from e
+    elif kind == "gdrive":
+        if not isinstance(config.get("folder_id"), str) or not config["folder_id"]:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="gdrive source requires 'folder_id'",
+            )
+        if (
+            not isinstance(config.get("service_account_json"), str)
+            or not config["service_account_json"]
+        ):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "gdrive source requires 'service_account_json' "
+                    "(raw JSON string of a Google service-account key)"
+                ),
+            )
+    elif kind == "onedrive":
+        if (
+            not isinstance(config.get("access_token"), str)
+            or not config["access_token"]
+        ):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="onedrive source requires 'access_token'",
+            )
+        if (
+            not isinstance(config.get("client_id"), str)
+            or not config["client_id"]
+        ):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "onedrive source requires 'client_id' for token refresh"
+                ),
+            )
 
 
 def _enqueue_harvest(source_id: str) -> None:

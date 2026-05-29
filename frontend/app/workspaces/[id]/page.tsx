@@ -259,6 +259,9 @@ const DOC_SOURCE_KIND_LABEL: Record<DocSourceKind, string> = {
   folder: "Folder",
   url_list: "URL list",
   db_column: "DB column",
+  smb: "SMB share",
+  gdrive: "Google Drive",
+  onedrive: "OneDrive",
 };
 
 function DocSourcesSection({ workspaceId }: { workspaceId: string }) {
@@ -429,6 +432,26 @@ function AddDocSourcePanel({
   const [dbTable, setDbTable] = useState("");
   const [dbColumn, setDbColumn] = useState("");
   const [dbUrlPrefix, setDbUrlPrefix] = useState("");
+  const [dbExtraColumns, setDbExtraColumns] = useState("");
+  // smb
+  const [smbServer, setSmbServer] = useState("");
+  const [smbShare, setSmbShare] = useState("");
+  const [smbPath, setSmbPath] = useState("");
+  const [smbUsername, setSmbUsername] = useState("");
+  const [smbPassword, setSmbPassword] = useState("");
+  const [smbDomain, setSmbDomain] = useState("");
+  const [smbRecursive, setSmbRecursive] = useState(true);
+  // gdrive
+  const [gdriveFolderId, setGdriveFolderId] = useState("");
+  const [gdriveServiceJson, setGdriveServiceJson] = useState("");
+  const [gdriveRecursive, setGdriveRecursive] = useState(true);
+  // onedrive
+  const [oneDriveAccessToken, setOneDriveAccessToken] = useState("");
+  const [oneDriveRefreshToken, setOneDriveRefreshToken] = useState("");
+  const [oneDriveClientId, setOneDriveClientId] = useState("");
+  const [oneDriveTenant, setOneDriveTenant] = useState("common");
+  const [oneDriveFolderPath, setOneDriveFolderPath] = useState("/");
+  const [oneDriveDriveId, setOneDriveDriveId] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function submit(e: React.FormEvent) {
@@ -449,12 +472,61 @@ function AddDocSourcePanel({
           return;
         }
         config = { urls };
-      } else {
+      } else if (kind === "db_column") {
+        // Comma-separated extras (Phase 17.1) — pulled alongside the
+        // PK + file column so chunk_metadata carries the row's
+        // human-readable identifiers ("title", "created_at", etc.).
+        const extras = dbExtraColumns
+          .split(/[,\n]/)
+          .map((s) => s.trim())
+          .filter(Boolean);
         config = {
           connection_id: dbConnId,
           table: dbTable,
           column: dbColumn,
           ...(dbUrlPrefix ? { url_prefix: dbUrlPrefix } : {}),
+          ...(extras.length ? { extra_columns: extras } : {}),
+        };
+      } else if (kind === "smb") {
+        config = {
+          server: smbServer,
+          share: smbShare,
+          ...(smbPath ? { path: smbPath } : {}),
+          username: smbUsername,
+          password: smbPassword,
+          ...(smbDomain ? { domain: smbDomain } : {}),
+          recursive: smbRecursive,
+        };
+      } else if (kind === "gdrive") {
+        if (!gdriveServiceJson.trim()) {
+          toast.error("Service-account JSON cannot be empty");
+          setBusy(false);
+          return;
+        }
+        // Validate JSON shape client-side so the user notices typos
+        // before the backend rejects with a generic 400.
+        try {
+          JSON.parse(gdriveServiceJson);
+        } catch {
+          toast.error("Service-account JSON is not valid JSON");
+          setBusy(false);
+          return;
+        }
+        config = {
+          folder_id: gdriveFolderId,
+          service_account_json: gdriveServiceJson,
+          recursive: gdriveRecursive,
+        };
+      } else if (kind === "onedrive") {
+        config = {
+          access_token: oneDriveAccessToken,
+          client_id: oneDriveClientId,
+          ...(oneDriveRefreshToken
+            ? { refresh_token: oneDriveRefreshToken }
+            : {}),
+          tenant: oneDriveTenant || "common",
+          folder_path: oneDriveFolderPath || "/",
+          ...(oneDriveDriveId ? { drive_id: oneDriveDriveId } : {}),
         };
       }
       await createDocSource(workspaceId, {
@@ -511,6 +583,9 @@ function AddDocSourcePanel({
                 { v: "folder", label: "Folder" },
                 { v: "url_list", label: "URL list" },
                 { v: "db_column", label: "DB column" },
+                { v: "smb", label: "SMB share" },
+                { v: "gdrive", label: "Google Drive" },
+                { v: "onedrive", label: "OneDrive" },
               ] as const
             ).map((m) => (
               <button
@@ -620,6 +695,247 @@ function AddDocSourcePanel({
                 className="w-full input"
               />
             </label>
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                Extra columns (optional — comma-separated, e.g.
+                title, created_at)
+              </span>
+              <input
+                value={dbExtraColumns}
+                onChange={(e) => setDbExtraColumns(e.target.value)}
+                placeholder="title, created_at"
+                className="w-full input"
+              />
+              <span className="text-xs text-on-surface-variant">
+                Each row&apos;s values for these columns travel with
+                the file&apos;s RAG chunks so citations can reference
+                the originating row by its human-readable identifiers.
+              </span>
+            </label>
+          </>
+        ) : null}
+
+        {kind === "smb" ? (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  Server
+                </span>
+                <input
+                  required
+                  value={smbServer}
+                  onChange={(e) => setSmbServer(e.target.value)}
+                  placeholder="fileserver.local or 10.0.0.42"
+                  className="w-full input"
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  Share
+                </span>
+                <input
+                  required
+                  value={smbShare}
+                  onChange={(e) => setSmbShare(e.target.value)}
+                  placeholder="Documents"
+                  className="w-full input"
+                />
+              </label>
+            </div>
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                Path inside share (optional)
+              </span>
+              <input
+                value={smbPath}
+                onChange={(e) => setSmbPath(e.target.value)}
+                placeholder="HR/Policies"
+                className="w-full input"
+              />
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  Username
+                </span>
+                <input
+                  required
+                  value={smbUsername}
+                  onChange={(e) => setSmbUsername(e.target.value)}
+                  className="w-full input"
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  Password
+                </span>
+                <input
+                  required
+                  type="password"
+                  value={smbPassword}
+                  onChange={(e) => setSmbPassword(e.target.value)}
+                  className="w-full input"
+                />
+              </label>
+            </div>
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                Domain (optional, leave blank for workgroup)
+              </span>
+              <input
+                value={smbDomain}
+                onChange={(e) => setSmbDomain(e.target.value)}
+                placeholder="CORP"
+                className="w-full input"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-sm text-on-surface-variant">
+              <input
+                type="checkbox"
+                checked={smbRecursive}
+                onChange={(e) => setSmbRecursive(e.target.checked)}
+              />
+              Recurse into subfolders
+            </label>
+          </>
+        ) : null}
+
+        {kind === "gdrive" ? (
+          <>
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                Folder ID
+              </span>
+              <input
+                required
+                value={gdriveFolderId}
+                onChange={(e) => setGdriveFolderId(e.target.value)}
+                placeholder="1AbC..._XyZ (from the Drive URL)"
+                className="w-full input font-mono text-xs"
+              />
+              <span className="text-xs text-on-surface-variant">
+                The part after <code>/folders/</code> in the Drive
+                URL. Share the folder with the service
+                account&apos;s email first.
+              </span>
+            </label>
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                Service-account JSON
+              </span>
+              <textarea
+                required
+                value={gdriveServiceJson}
+                onChange={(e) => setGdriveServiceJson(e.target.value)}
+                placeholder={
+                  '{"type":"service_account","project_id":"...","private_key":"...",...}'
+                }
+                rows={6}
+                className="w-full input font-mono text-xs"
+              />
+              <span className="text-xs text-on-surface-variant">
+                Paste the raw JSON from Google Cloud Console →
+                Service accounts → Keys → Add key. Stored encrypted
+                at rest.
+              </span>
+            </label>
+            <label className="flex items-center gap-2 text-sm text-on-surface-variant">
+              <input
+                type="checkbox"
+                checked={gdriveRecursive}
+                onChange={(e) => setGdriveRecursive(e.target.checked)}
+              />
+              Recurse into subfolders
+            </label>
+          </>
+        ) : null}
+
+        {kind === "onedrive" ? (
+          <>
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                Client ID (Azure AD app)
+              </span>
+              <input
+                required
+                value={oneDriveClientId}
+                onChange={(e) => setOneDriveClientId(e.target.value)}
+                placeholder="12345678-..."
+                className="w-full input font-mono text-xs"
+              />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                Tenant
+              </span>
+              <input
+                value={oneDriveTenant}
+                onChange={(e) => setOneDriveTenant(e.target.value)}
+                placeholder="common"
+                className="w-full input"
+              />
+              <span className="text-xs text-on-surface-variant">
+                <code>common</code> for personal accounts;{" "}
+                <code>organizations</code> for any business tenant;
+                or a specific tenant ID.
+              </span>
+            </label>
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                Access token (from device-code flow)
+              </span>
+              <textarea
+                required
+                value={oneDriveAccessToken}
+                onChange={(e) => setOneDriveAccessToken(e.target.value)}
+                placeholder="eyJ0eXAi..."
+                rows={3}
+                className="w-full input font-mono text-xs"
+              />
+              <span className="text-xs text-on-surface-variant">
+                Run the device-flow helper (see infra/README) and
+                paste the access_token. Refresh handled automatically
+                if you also paste the refresh_token below.
+              </span>
+            </label>
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                Refresh token (optional)
+              </span>
+              <textarea
+                value={oneDriveRefreshToken}
+                onChange={(e) => setOneDriveRefreshToken(e.target.value)}
+                rows={2}
+                className="w-full input font-mono text-xs"
+              />
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  Folder path
+                </span>
+                <input
+                  value={oneDriveFolderPath}
+                  onChange={(e) =>
+                    setOneDriveFolderPath(e.target.value)
+                  }
+                  placeholder="/Documents/Policies"
+                  className="w-full input"
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  Drive ID (optional)
+                </span>
+                <input
+                  value={oneDriveDriveId}
+                  onChange={(e) => setOneDriveDriveId(e.target.value)}
+                  placeholder="b!ABCxyz..."
+                  className="w-full input font-mono text-xs"
+                />
+              </label>
+            </div>
           </>
         ) : null}
 
