@@ -227,6 +227,54 @@ export async function crawlDocSource(
   );
 }
 
+// ── Cloud auth (Phase 18 — OneDrive device-code flow) ──
+
+export type OneDriveStartResponse = {
+  device_code: string;
+  user_code: string;
+  verification_uri: string;
+  expires_in: number;
+  interval: number;
+  message: string;
+};
+
+// Discriminated by ``status``; tokens populated only on "ok".
+export type OneDrivePollResponse = {
+  status:
+    | "pending"
+    | "slow_down"
+    | "expired"
+    | "denied"
+    | "error"
+    | "ok";
+  access_token?: string | null;
+  refresh_token?: string | null;
+  expires_in?: number | null;
+  expires_at?: string | null;
+  detail?: string | null;
+};
+
+export async function onedriveAuthStart(
+  client_id: string,
+  tenant: string = "common",
+): Promise<OneDriveStartResponse> {
+  return api<OneDriveStartResponse>("/cloud-auth/onedrive/start", {
+    method: "POST",
+    body: JSON.stringify({ client_id, tenant }),
+  });
+}
+
+export async function onedriveAuthPoll(
+  client_id: string,
+  device_code: string,
+  tenant: string = "common",
+): Promise<OneDrivePollResponse> {
+  return api<OneDrivePollResponse>("/cloud-auth/onedrive/poll", {
+    method: "POST",
+    body: JSON.stringify({ client_id, device_code, tenant }),
+  });
+}
+
 export async function uploadDataFile(
   workspace_id: string,
   file: File,

@@ -17,6 +17,8 @@ import {
   getToken,
   listConnections,
   listDocSources,
+  onedriveAuthPoll,
+  onedriveAuthStart,
   refreshConnection,
   testConnection,
   uploadDataFile,
@@ -24,6 +26,7 @@ import {
   type Dialect,
   type DocSource,
   type DocSourceKind,
+  type OneDriveStartResponse,
   type TestConnectionResult,
 } from "@/lib/api";
 
@@ -452,7 +455,82 @@ function AddDocSourcePanel({
   const [oneDriveTenant, setOneDriveTenant] = useState("common");
   const [oneDriveFolderPath, setOneDriveFolderPath] = useState("/");
   const [oneDriveDriveId, setOneDriveDriveId] = useState("");
+  // OneDrive device-flow state (Phase 18). When ``oneDriveDeviceFlow``
+  // is non-null, the form shows the verification_uri + user_code and
+  // polls the backend every ``interval`` seconds until tokens arrive.
+  const [oneDriveDeviceFlow, setOneDriveDeviceFlow] =
+    useState<OneDriveStartResponse | null>(null);
+  const [oneDriveAuthStatus, setOneDriveAuthStatus] = useState<string | null>(
+    null,
+  );
+  const [oneDriveAuthBusy, setOneDriveAuthBusy] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  async function runOneDriveAuth() {
+    if (!oneDriveClientId.trim()) {
+      toast.error("Client ID required to start OneDrive auth");
+      return;
+    }
+    setOneDriveAuthBusy(true);
+    setOneDriveAuthStatus("Starting device flow…");
+    try {
+      const startResp = await onedriveAuthStart(
+        oneDriveClientId,
+        oneDriveTenant || "common",
+      );
+      setOneDriveDeviceFlow(startResp);
+      setOneDriveAuthStatus(
+        `Open ${startResp.verification_uri} and enter code: ${startResp.user_code}`,
+      );
+
+      // Poll loop. MS spec: respect the server-given interval and bump
+      // by 5 s when we see "slow_down".
+      const deadline = Date.now() + startResp.expires_in * 1000;
+      let interval = Math.max(startResp.interval, 1) * 1000;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, interval));
+        const poll = await onedriveAuthPoll(
+          oneDriveClientId,
+          startResp.device_code,
+          oneDriveTenant || "common",
+        );
+        if (poll.status === "ok") {
+          setOneDriveAccessToken(poll.access_token || "");
+          setOneDriveRefreshToken(poll.refresh_token || "");
+          setOneDriveDeviceFlow(null);
+          setOneDriveAuthStatus(
+            "Authorised — tokens populated below. Click 'Create source' to save.",
+          );
+          toast.success("OneDrive authorised");
+          return;
+        }
+        if (poll.status === "pending") {
+          continue;
+        }
+        if (poll.status === "slow_down") {
+          interval += 5000;
+          continue;
+        }
+        // expired / denied / error are terminal.
+        setOneDriveAuthStatus(
+          `Auth ${poll.status}: ${poll.detail ?? "no detail"}`,
+        );
+        setOneDriveDeviceFlow(null);
+        toast.error(`OneDrive auth ${poll.status}`);
+        return;
+      }
+      setOneDriveAuthStatus("Device code expired — restart the flow.");
+      setOneDriveDeviceFlow(null);
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "OneDrive auth failed",
+      );
+      setOneDriveAuthStatus(null);
+      setOneDriveDeviceFlow(null);
+    } finally {
+      setOneDriveAuthBusy(false);
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -881,9 +959,46 @@ function AddDocSourcePanel({
                 or a specific tenant ID.
               </span>
             </label>
+            <div className="space-y-2 rounded-xl border border-outline/20 bg-surface-container-high/30 px-3 py-3">
+              <div className="flex items-center gap-3 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => void runOneDriveAuth()}
+                  disabled={oneDriveAuthBusy || !oneDriveClientId}
+                  className="rounded-xl bg-primary-container text-on-primary-container px-3 py-1.5 text-sm font-semibold disabled:opacity-50"
+                >
+                  {oneDriveAuthBusy ? "Authorising…" : "Authorise OneDrive"}
+                </button>
+                {oneDriveDeviceFlow ? (
+                  <a
+                    href={oneDriveDeviceFlow.verification_uri}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary underline text-sm"
+                  >
+                    Open {oneDriveDeviceFlow.verification_uri} ↗
+                  </a>
+                ) : null}
+              </div>
+              {oneDriveDeviceFlow ? (
+                <div className="text-sm">
+                  <span className="text-on-surface-variant">
+                    Enter this code in the browser:{" "}
+                  </span>
+                  <span className="font-mono text-base font-semibold text-on-surface select-all">
+                    {oneDriveDeviceFlow.user_code}
+                  </span>
+                </div>
+              ) : null}
+              {oneDriveAuthStatus ? (
+                <div className="text-xs text-on-surface-variant">
+                  {oneDriveAuthStatus}
+                </div>
+              ) : null}
+            </div>
             <label className="block space-y-1">
               <span className="text-xs uppercase tracking-wider text-on-surface-variant">
-                Access token (from device-code flow)
+                Access token (populated by Authorise button, or paste manually)
               </span>
               <textarea
                 required
@@ -894,9 +1009,10 @@ function AddDocSourcePanel({
                 className="w-full input font-mono text-xs"
               />
               <span className="text-xs text-on-surface-variant">
-                Run the device-flow helper (see infra/README) and
-                paste the access_token. Refresh handled automatically
-                if you also paste the refresh_token below.
+                Use the Authorise button above — it runs the device-
+                code flow against Microsoft and populates this field
+                automatically. Refresh handled if refresh_token is
+                also present.
               </span>
             </label>
             <label className="block space-y-1">
