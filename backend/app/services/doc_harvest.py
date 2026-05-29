@@ -1105,3 +1105,215 @@ async def harvest_smb(
             await asyncio.to_thread(smbclient.reset_connection_cache)
         except Exception as e:  # pragma: no cover — defensive
             log.warning("harvest_smb: reset_connection_cache failed: %s", e)
+
+
+# ── IMAP email harvest (Phase 19) ─────────────────────────────────
+
+
+async def harvest_imap(
+    *,
+    server: str,
+    port: int = 993,
+    ssl: bool = True,
+    username: str,
+    password: str,
+    folder: str = "INBOX",
+    since_days: int = 90,
+    max_messages: int = 500,
+    include_attachments: bool = True,
+) -> AsyncIterator[tuple[str, bytes, dict]]:
+    """Crawl an IMAP mailbox and yield each message + each attachment
+    as a 3-tuple ``(filename, bytes, row_context)``.
+
+    The row_context shape mirrors Phase 17.1's DB-column linkage so
+    the citation pipeline doesn't need a special path for emails::
+
+        {
+          "connection_id": "imap:server/user",   # synthetic
+          "table":         "email",               # virtual table
+          "row_pk":        {"message_id": "..."},
+          "extras":        {"from":..., "subject":..., "date":..., "folder":...},
+          "file_column":   "body" | "attachment",
+          "file_reference": "<subject>" | "<filename>",
+        }
+
+    Each message produces:
+      * One ``.txt`` "file" carrying the subject + headers + body —
+        the extractor will pass it through ``_decode_text``.
+      * Zero or more attachment "files" (PDF / DOCX / XLSX / ...)
+        — passed through the existing per-format extractors. When
+        ``include_attachments=False`` the attachments are skipped.
+
+    Both message-as-text and each attachment share the same
+    row_context, so when the agent answers from an attachment the
+    citation panel still shows the email's metadata and the user
+    can find the original thread.
+
+    ``since_days`` filters to the recent slice (default 90 days) so
+    a fresh source doesn't trigger a multi-gigabyte download on the
+    first crawl. ``max_messages`` is a hard cap on top of that.
+
+    Uses ``imap_tools`` (sync client) inside ``asyncio.to_thread`` —
+    the IMAP protocol is chatty and there's no async client worth
+    the dependency for a once-a-day crawl.
+    """
+    # Local imports keep the dependency optional — installations
+    # that don't use IMAP don't pay for the wheel at startup.
+    from datetime import datetime, timedelta, timezone
+
+    from imap_tools import AND, MailBox, MailBoxUnencrypted
+
+    yielded = 0
+    cutoff = datetime.now(timezone.utc) - timedelta(days=since_days)
+    conn_id_synthetic = f"imap:{server}/{username}"
+
+    def _open_mailbox():
+        if ssl:
+            box = MailBox(server, port=port)
+        else:
+            box = MailBoxUnencrypted(server, port=port)
+        box.login(username, password, initial_folder=folder)
+        return box
+
+    def _list_uids() -> list[str]:
+        box = _open_mailbox()
+        try:
+            since_str = cutoff.date()
+            uids = list(box.uids(AND(date_gte=since_str)))
+            # imap_tools returns oldest-first; keep the most recent
+            # max_messages so a fresh crawl prioritises freshness.
+            return (
+                uids[-max_messages:] if len(uids) > max_messages else uids
+            )
+        finally:
+            try:
+                box.logout()
+            except Exception:
+                pass
+
+    def _fetch_one(uid: str) -> list[tuple[str, bytes, dict]]:
+        """Pull one message + its attachments. Returns a list of
+        3-tuples or empty list on error. Runs inside to_thread."""
+        out: list[tuple[str, bytes, dict]] = []
+        try:
+            box = _open_mailbox()
+        except Exception as e:
+            log.warning("harvest_imap: connect/login failed: %s", e)
+            return out
+        try:
+            msgs = list(box.fetch(AND(uid=uid), mark_seen=False, bulk=False))
+            if not msgs:
+                return out
+            msg = msgs[0]
+
+            subject = msg.subject or "(no subject)"
+            from_ = (msg.from_ or "").lower()
+            date_iso = (
+                msg.date.replace(microsecond=0).isoformat()
+                if msg.date
+                else ""
+            )
+            message_id = msg.headers.get("message-id", "") or msg.uid
+
+            row_pk = {"message_id": str(message_id)}
+            extras = {
+                "from": from_,
+                "subject": subject,
+                "date": date_iso,
+                "folder": folder,
+            }
+
+            # Compose the body text — prefer plain when present, fall
+            # back to HTML (extractor will strip tags via BS4).
+            body_text = (msg.text or "").strip()
+            if not body_text and msg.html:
+                body_blob = msg.html.encode("utf-8")
+                body_filename = (
+                    f"email_{_safe_email_slug(subject)}.html"
+                )
+            else:
+                # Prepend headers so the embedder sees the metadata
+                # too — searchable context like "from Alice on 2026-05-10".
+                header_block = (
+                    f"From: {from_}\n"
+                    f"Subject: {subject}\n"
+                    f"Date: {date_iso}\n\n"
+                )
+                body_text = header_block + body_text
+                body_blob = body_text.encode("utf-8")
+                body_filename = (
+                    f"email_{_safe_email_slug(subject)}.txt"
+                )
+
+            if 0 < len(body_blob) <= MAX_FILE_BYTES:
+                body_ctx = dict(
+                    connection_id=conn_id_synthetic,
+                    table="email",
+                    row_pk=row_pk,
+                    extras=extras,
+                    file_column="body",
+                    file_reference=subject,
+                )
+                out.append((body_filename, body_blob, body_ctx))
+
+            if include_attachments:
+                for att in msg.attachments:
+                    if not att.filename:
+                        continue
+                    data = att.payload or b""
+                    if not data:
+                        continue
+                    if len(data) > MAX_FILE_BYTES:
+                        log.warning(
+                            "harvest_imap: attachment %s exceeds size "
+                            "cap (%d bytes), skipping",
+                            att.filename, len(data),
+                        )
+                        continue
+                    att_ctx = dict(
+                        connection_id=conn_id_synthetic,
+                        table="email",
+                        row_pk=row_pk,
+                        extras=extras,
+                        file_column="attachment",
+                        file_reference=att.filename,
+                    )
+                    out.append((att.filename, data, att_ctx))
+            return out
+        finally:
+            try:
+                box.logout()
+            except Exception:
+                pass
+
+    try:
+        uids = await asyncio.to_thread(_list_uids)
+    except Exception as e:
+        log.warning("harvest_imap: enumerate UIDs failed: %s", e)
+        return
+
+    for uid in uids:
+        if yielded >= MAX_DOCS_PER_HARVEST:
+            log.info(
+                "harvest_imap: hit %d-doc cap; stopping",
+                MAX_DOCS_PER_HARVEST,
+            )
+            return
+        items = await asyncio.to_thread(_fetch_one, uid)
+        for fname, blob, ctx in items:
+            yield fname, blob, ctx
+            yielded += 1
+            if yielded >= MAX_DOCS_PER_HARVEST:
+                return
+
+
+def _safe_email_slug(s: str) -> str:
+    """Slugify a subject for use as a filename. Keeps the extension
+    pipeline happy (alphanumerics + underscores), truncates at 60
+    chars."""
+    import re
+
+    out = re.sub(r"[^a-zA-Z0-9]+", "_", s or "").strip("_").lower()
+    if not out:
+        out = "noname"
+    return out[:60]

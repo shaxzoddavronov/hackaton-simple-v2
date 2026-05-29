@@ -169,7 +169,8 @@ export type DocSourceKind =
   | "db_column"
   | "smb"
   | "gdrive"
-  | "onedrive";
+  | "onedrive"
+  | "imap";
 export type DocSourceStatus = "idle" | "harvesting" | "ready" | "error";
 
 export type DocSource = {

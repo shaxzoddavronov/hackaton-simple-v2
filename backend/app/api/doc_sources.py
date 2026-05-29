@@ -40,7 +40,7 @@ router = APIRouter(prefix="/workspaces", tags=["doc-sources"])
 
 
 SourceKind = Literal[
-    "folder", "url_list", "db_column", "smb", "gdrive", "onedrive"
+    "folder", "url_list", "db_column", "smb", "gdrive", "onedrive", "imap"
 ]
 SourceStatus = Literal["idle", "harvesting", "ready", "error"]
 
@@ -158,6 +158,25 @@ def _validate_config(kind: str, config: dict[str, Any]) -> None:
                     "onedrive source requires 'client_id' for token refresh"
                 ),
             )
+    elif kind == "imap":
+        for key in ("server", "username", "password"):
+            if (
+                not isinstance(config.get(key), str)
+                or not config[key]
+            ):
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    detail=f"imap source requires non-empty '{key}'",
+                )
+        # Port + since_days + max_messages have safe defaults inside
+        # the harvester, but if the caller supplies them we sanity-
+        # check the types so a bad number doesn't reach the IMAP lib.
+        for key in ("port", "since_days", "max_messages"):
+            if key in config and not isinstance(config[key], int):
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    detail=f"imap source '{key}' must be an integer",
+                )
 
 
 def _enqueue_harvest(source_id: str) -> None:

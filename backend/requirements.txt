@@ -79,6 +79,12 @@ google-auth>=2.30
 # or ``winget install Gyan.FFmpeg`` (Windows).
 faster-whisper>=1.0.3
 
+# IMAP email harvest (Phase 19 — mailboxes as a DocSource kind).
+# Pure-python sync client; we run it inside asyncio.to_thread from
+# the async harvester. ``imap_tools`` covers Gmail, Outlook, Yandex,
+# Mail.ru, Zoho, FastMail, and any RFC 3501-compliant server.
+imap_tools>=1.6
+
 # Agent orchestration
 langgraph
 langchain-core

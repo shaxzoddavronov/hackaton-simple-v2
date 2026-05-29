@@ -265,6 +265,7 @@ const DOC_SOURCE_KIND_LABEL: Record<DocSourceKind, string> = {
   smb: "SMB share",
   gdrive: "Google Drive",
   onedrive: "OneDrive",
+  imap: "Email (IMAP)",
 };
 
 function DocSourcesSection({ workspaceId }: { workspaceId: string }) {
@@ -464,6 +465,16 @@ function AddDocSourcePanel({
     null,
   );
   const [oneDriveAuthBusy, setOneDriveAuthBusy] = useState(false);
+  // imap (Phase 19)
+  const [imapServer, setImapServer] = useState("");
+  const [imapPort, setImapPort] = useState("993");
+  const [imapSsl, setImapSsl] = useState(true);
+  const [imapUsername, setImapUsername] = useState("");
+  const [imapPassword, setImapPassword] = useState("");
+  const [imapFolder, setImapFolder] = useState("INBOX");
+  const [imapSinceDays, setImapSinceDays] = useState("90");
+  const [imapMaxMessages, setImapMaxMessages] = useState("500");
+  const [imapIncludeAttachments, setImapIncludeAttachments] = useState(true);
   const [busy, setBusy] = useState(false);
 
   async function runOneDriveAuth() {
@@ -606,6 +617,18 @@ function AddDocSourcePanel({
           folder_path: oneDriveFolderPath || "/",
           ...(oneDriveDriveId ? { drive_id: oneDriveDriveId } : {}),
         };
+      } else if (kind === "imap") {
+        config = {
+          server: imapServer,
+          port: Number(imapPort) || 993,
+          ssl: imapSsl,
+          username: imapUsername,
+          password: imapPassword,
+          folder: imapFolder || "INBOX",
+          since_days: Number(imapSinceDays) || 90,
+          max_messages: Number(imapMaxMessages) || 500,
+          include_attachments: imapIncludeAttachments,
+        };
       }
       await createDocSource(workspaceId, {
         name,
@@ -664,6 +687,7 @@ function AddDocSourcePanel({
                 { v: "smb", label: "SMB share" },
                 { v: "gdrive", label: "Google Drive" },
                 { v: "onedrive", label: "OneDrive" },
+                { v: "imap", label: "Email (IMAP)" },
               ] as const
             ).map((m) => (
               <button
@@ -1051,6 +1075,148 @@ function AddDocSourcePanel({
                   className="w-full input font-mono text-xs"
                 />
               </label>
+            </div>
+          </>
+        ) : null}
+
+        {kind === "imap" ? (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block space-y-1 col-span-2 sm:col-span-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  IMAP server
+                </span>
+                <input
+                  required
+                  value={imapServer}
+                  onChange={(e) => setImapServer(e.target.value)}
+                  placeholder="imap.gmail.com / outlook.office365.com"
+                  className="w-full input"
+                />
+              </label>
+              <label className="block space-y-1 col-span-2 sm:col-span-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  Port
+                </span>
+                <input
+                  type="number"
+                  value={imapPort}
+                  onChange={(e) => setImapPort(e.target.value)}
+                  className="w-full input"
+                />
+              </label>
+            </div>
+            <label className="flex items-center gap-2 text-sm text-on-surface-variant">
+              <input
+                type="checkbox"
+                checked={imapSsl}
+                onChange={(e) => setImapSsl(e.target.checked)}
+              />
+              Use SSL / TLS (recommended)
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  Username
+                </span>
+                <input
+                  required
+                  value={imapUsername}
+                  onChange={(e) => setImapUsername(e.target.value)}
+                  placeholder="alice@example.com"
+                  className="w-full input"
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  Password / app password
+                </span>
+                <input
+                  required
+                  type="password"
+                  value={imapPassword}
+                  onChange={(e) => setImapPassword(e.target.value)}
+                  className="w-full input"
+                />
+              </label>
+            </div>
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                Folder
+              </span>
+              <input
+                value={imapFolder}
+                onChange={(e) => setImapFolder(e.target.value)}
+                placeholder="INBOX"
+                className="w-full input"
+              />
+              <span className="text-xs text-on-surface-variant">
+                Common: <code>INBOX</code>, <code>Sent</code>,{" "}
+                <code>[Gmail]/All Mail</code>.
+              </span>
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  Crawl since (days)
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  max={3650}
+                  value={imapSinceDays}
+                  onChange={(e) => setImapSinceDays(e.target.value)}
+                  className="w-full input"
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  Max messages per crawl
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  max={5000}
+                  value={imapMaxMessages}
+                  onChange={(e) => setImapMaxMessages(e.target.value)}
+                  className="w-full input"
+                />
+              </label>
+            </div>
+            <label className="flex items-center gap-2 text-sm text-on-surface-variant">
+              <input
+                type="checkbox"
+                checked={imapIncludeAttachments}
+                onChange={(e) =>
+                  setImapIncludeAttachments(e.target.checked)
+                }
+              />
+              Include attachments (PDF / DOCX / images go through the
+              same extractors)
+            </label>
+            <div className="rounded-xl border border-outline/20 bg-surface-container-high/30 px-3 py-2 text-xs text-on-surface-variant">
+              <b>Gmail</b>: enable IMAP in settings, generate an{" "}
+              <a
+                href="https://myaccount.google.com/apppasswords"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary underline"
+              >
+                app password
+              </a>{" "}
+              (2FA required), use that here — not your regular
+              password.
+              <br />
+              <b>Outlook / Microsoft 365</b>: same pattern via{" "}
+              <a
+                href="https://account.microsoft.com/security"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary underline"
+              >
+                app passwords
+              </a>
+              .
             </div>
           </>
         ) : null}

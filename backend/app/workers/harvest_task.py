@@ -33,6 +33,7 @@ from app.services.doc_harvest import (
     fetch_urls,
     harvest_db_column,
     harvest_gdrive,
+    harvest_imap,
     harvest_onedrive,
     harvest_smb,
     walk_folder,
@@ -156,6 +157,33 @@ async def _harvest_async(source_id: UUID) -> dict[str, int]:
                     port=port,
                 ):
                     yield fname, data, None
+            elif kind == "imap":
+                # IMAP harvester yields 3-tuples natively — each email
+                # body + attachment carries a synthetic row_context
+                # (table="email", row_pk={message_id:...}) so citations
+                # link the chunk back to the originating message,
+                # mirroring the Phase 17.1 db_column linkage.
+                imap_server = str(config["server"])
+                imap_port = int(config.get("port") or 993)
+                imap_ssl = bool(config.get("ssl", True))
+                imap_user = str(config["username"])
+                imap_pass = str(config["password"])
+                imap_folder = str(config.get("folder") or "INBOX")
+                imap_since_days = int(config.get("since_days", 90))
+                imap_max = int(config.get("max_messages", 500))
+                imap_atts = bool(config.get("include_attachments", True))
+                async for fname, data, ctx in harvest_imap(
+                    server=imap_server,
+                    port=imap_port,
+                    ssl=imap_ssl,
+                    username=imap_user,
+                    password=imap_pass,
+                    folder=imap_folder,
+                    since_days=imap_since_days,
+                    max_messages=imap_max,
+                    include_attachments=imap_atts,
+                ):
+                    yield fname, data, ctx
             else:
                 raise ValueError(f"unknown source_kind {kind!r}")
 
