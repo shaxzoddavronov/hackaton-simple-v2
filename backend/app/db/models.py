@@ -54,15 +54,33 @@ _UUID_DEFAULT = text("gen_random_uuid()")
 
 
 class User(Base):
-    """A person who can log in and own workspaces."""
+    """A person who can log in and own workspaces.
+
+    Phase 16 added ``username`` as a primary login identifier alongside
+    ``email``. Both columns are unique; ``/auth/login`` accepts either
+    in the ``username`` form field.
+    """
 
     __tablename__ = "users"
 
     id: Mapped[UUID] = mapped_column(
         UUIDType, primary_key=True, server_default=_UUID_DEFAULT
     )
+    username: Mapped[str] = mapped_column(
+        String(64), nullable=False, unique=True
+    )
     email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_active: Mapped[bool] = mapped_column(
+        nullable=False, server_default=text("TRUE")
+    )
+    # Phase 16: super-users are the only role that can register new
+    # users, change roles, and edit permissions (see api/admin.py).
+    # The very first user is promoted on startup via the
+    # ``QM_BOOTSTRAP_SUPERUSER_*`` env vars (config.py).
+    is_superuser: Mapped[bool] = mapped_column(
+        nullable=False, server_default=text("FALSE")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -73,8 +91,137 @@ class User(Base):
     chat_sessions: Mapped[list["ChatSession"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
 
-    __table_args__ = (Index("ix_users_email", "email", unique=True),)
+    __table_args__ = (
+        Index("ix_users_email", "email", unique=True),
+        Index("ix_users_username", "username", unique=True),
+    )
+
+
+class RefreshToken(Base):
+    """Server-stored refresh token issued at login.
+
+    Why server-side instead of self-contained JWT? Refresh tokens need
+    to be revocable — on logout, on password change, on suspicious
+    activity. A stateless JWT can't be revoked without a deny-list,
+    and a deny-list is just a server-stored table that we already
+    have. We store only the hash so a DB leak can't replay sessions.
+
+    Lifecycle:
+      * Issued at ``POST /auth/login`` — random 32 bytes, base64-url
+        encoded; client gets the raw token, DB stores SHA-256.
+      * Spent at ``POST /auth/refresh`` — single-use: row is marked
+        ``revoked_at`` and a new pair (access + refresh) is minted
+        (rotation). If a stolen-token replay arrives, the second use
+        fails and the attacker is locked out.
+      * Revoked at ``POST /auth/logout`` — same flag, no new pair.
+      * Expires at ``expires_at`` — clean-up via a periodic sweep
+        (cron / Celery beat). Stale rows are harmless until reused.
+    """
+
+    __tablename__ = "refresh_tokens"
+
+    id: Mapped[UUID] = mapped_column(
+        UUIDType, primary_key=True, server_default=_UUID_DEFAULT
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        UUIDType,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # SHA-256 hex of the raw token. 64 chars.
+    token_hash: Mapped[str] = mapped_column(
+        String(64), nullable=False, unique=True
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Free-form optional UA / IP for auditing — we don't enforce a
+    # session model, this is observability only.
+    user_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    client_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+    user: Mapped["User"] = relationship(back_populates="refresh_tokens")
+
+    __table_args__ = (
+        Index("ix_refresh_tokens_user_id", "user_id"),
+        Index("ix_refresh_tokens_token_hash", "token_hash", unique=True),
+    )
+
+
+class AuditLog(Base):
+    """Append-only audit trail of user actions.
+
+    Phase 16. Writes happen via :mod:`services.audit` from FastAPI
+    middleware (per-request) and from explicit ``log_action`` calls
+    inside high-value handlers (user create, permission change,
+    chat turn, doc-source crawl, …).
+
+    Schema is deliberately wide and loose:
+      * ``user_id`` nullable — anonymous requests (login attempts) and
+        system tasks (Celery beat) leave it blank.
+      * ``action`` is a short snake_case key like ``user.create``,
+        ``permission.grant``, ``chat.turn``, ``auth.login``.
+      * ``target_kind`` + ``target_id`` localize WHAT was acted on —
+        e.g. ``("user", <uuid>)`` or ``("connection", <uuid>)``.
+      * ``payload`` is a free-form JSON dict for action-specific
+        details (what fields changed, error code, etc.). Bounded by
+        application code; the column is unindexed.
+      * ``status`` — ``ok`` / ``error`` / ``denied`` so audit consumers
+        can filter for failures.
+
+    No FK constraints on ``target_id`` — referenced rows may be
+    deleted (data retention) without orphaning the audit row. We
+    accept stale pointers as a feature: the log preserves history.
+    """
+
+    __tablename__ = "audit_log"
+
+    id: Mapped[UUID] = mapped_column(
+        UUIDType, primary_key=True, server_default=_UUID_DEFAULT
+    )
+    user_id: Mapped[UUID | None] = mapped_column(
+        UUIDType,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    target_kind: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
+    target_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, server_default=text("'ok'")
+    )
+    payload: Mapped[dict[str, Any]] = mapped_column(
+        JSONType, nullable=False, server_default=text("'{}'::jsonb")
+    )
+    client_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('ok','error','denied')",
+            name="ck_audit_log_status",
+        ),
+        Index("ix_audit_log_user_id", "user_id"),
+        Index("ix_audit_log_action", "action"),
+        Index("ix_audit_log_created_at", "created_at"),
+    )
 
 
 class Workspace(Base):
@@ -631,7 +778,7 @@ class DocSource(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "source_kind IN ('folder','url_list','db_column')",
+            "source_kind IN ('folder','url_list','db_column','smb','gdrive','onedrive','imap','slack','telegram')",
             name="ck_doc_sources_kind",
         ),
         CheckConstraint(
@@ -645,8 +792,115 @@ class DocSource(Base):
     )
 
 
+class Dashboard(Base):
+    """A user-curated collection of saved questions.
+
+    Phase 26 — once the user has a question they want to keep an
+    eye on ("refund queue today", "top customers this week"), they
+    star the message in the chat. The agent transcribes the
+    question into a SavedQuestion row and groups it under a
+    Dashboard. The dashboard page re-runs every question on demand
+    so the user has a snapshot view without re-typing the prompt.
+    """
+
+    __tablename__ = "dashboards"
+
+    id: Mapped[UUID] = mapped_column(
+        UUIDType, primary_key=True, server_default=_UUID_DEFAULT
+    )
+    owner_id: Mapped[UUID] = mapped_column(
+        UUIDType,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    workspace_id: Mapped[UUID] = mapped_column(
+        UUIDType,
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id", "name", name="uq_dashboards_workspace_name"
+        ),
+        Index("ix_dashboards_owner_id", "owner_id"),
+        Index("ix_dashboards_workspace_id", "workspace_id"),
+    )
+
+
+class SavedQuestion(Base):
+    """A natural-language question the user starred for re-running.
+
+    Stores the prompt + the connection it should run against. The
+    dashboard page POSTs each row through the normal /chat pipeline
+    on render so the result is always fresh (subject to the Phase
+    23 query-result cache hit-rate).
+
+    The dashboard_id is nullable — starred-but-not-yet-grouped
+    questions live in an implicit "Inbox" until the user files them.
+    """
+
+    __tablename__ = "saved_questions"
+
+    id: Mapped[UUID] = mapped_column(
+        UUIDType, primary_key=True, server_default=_UUID_DEFAULT
+    )
+    owner_id: Mapped[UUID] = mapped_column(
+        UUIDType,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    workspace_id: Mapped[UUID] = mapped_column(
+        UUIDType,
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    dashboard_id: Mapped[UUID | None] = mapped_column(
+        UUIDType,
+        ForeignKey("dashboards.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # The connection the saved question should run against. We pin
+    # this at save time (rather than re-resolving via the
+    # workspace_resolver each rerun) so a dashboard view is
+    # deterministic — moving connections between workspaces won't
+    # silently change what the saved question targets.
+    connection_id: Mapped[UUID | None] = mapped_column(
+        UUIDType,
+        ForeignKey("workspace_connections.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    prompt: Mapped[str] = mapped_column(Text, nullable=False)
+    # ``position`` lets the frontend order cards inside a dashboard
+    # without a separate ordering table. NULL means "append".
+    position: Mapped[int | None] = mapped_column(nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_saved_questions_owner_id", "owner_id"),
+        Index("ix_saved_questions_workspace_id", "workspace_id"),
+        Index("ix_saved_questions_dashboard_id", "dashboard_id"),
+    )
+
+
 __all__ = [
     "User",
+    "RefreshToken",
+    "AuditLog",
     "Workspace",
     "WorkspaceConnection",
     "WorkspaceCredentials",
@@ -659,4 +913,6 @@ __all__ = [
     "UploadedDocument",
     "RagChunk",
     "DocSource",
+    "Dashboard",
+    "SavedQuestion",
 ]
