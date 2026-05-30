@@ -2,10 +2,29 @@
 
 import { CodeBlock } from "@/components/CodeBlock";
 import { RenderSpec } from "@/components/RenderSpec";
+import { useToast } from "@/components/Toast";
+import { createSavedQuestion } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import type { ChatMessage } from "@/lib/types";
 
-export function MessageBubble({ message }: { message: ChatMessage }) {
+/**
+ * Renders one chat message.
+ *
+ * Optional ``previousUserPrompt`` / ``workspaceId`` / ``connectionId``
+ * are passed through from the chat page so the Star button can save
+ * the upstream user message that produced this assistant answer.
+ */
+export function MessageBubble({
+  message,
+  previousUserPrompt,
+  workspaceId,
+  connectionId,
+}: {
+  message: ChatMessage;
+  previousUserPrompt?: string;
+  workspaceId?: string | null;
+  connectionId?: string | null;
+}) {
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
@@ -31,7 +50,61 @@ export function MessageBubble({ message }: { message: ChatMessage }) {
       {message.citations && message.citations.length ? (
         <CitationsList citations={message.citations} />
       ) : null}
+      {previousUserPrompt && workspaceId ? (
+        <StarButton
+          prompt={previousUserPrompt}
+          workspaceId={workspaceId}
+          connectionId={connectionId ?? null}
+        />
+      ) : null}
     </div>
+  );
+}
+
+function StarButton({
+  prompt,
+  workspaceId,
+  connectionId,
+}: {
+  prompt: string;
+  workspaceId: string;
+  connectionId: string | null;
+}) {
+  const toast = useToast();
+  async function onStar() {
+    const title = window.prompt(
+      "Save question as:",
+      prompt.slice(0, 60),
+    );
+    if (!title || !title.trim()) return;
+    try {
+      await createSavedQuestion(workspaceId, {
+        title: title.trim(),
+        prompt,
+        connection_id: connectionId,
+      });
+      toast.success(
+        "Starred — find it in Dashboards → Inbox",
+      );
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : "Failed to star question",
+      );
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => void onStar()}
+      title="Save this question for re-running from a dashboard"
+      className={cn(
+        "text-xs text-on-surface-variant hover:text-tertiary",
+        "flex items-center gap-1",
+      )}
+    >
+      <span>⭐</span>
+      <span>Star question</span>
+    </button>
   );
 }
 

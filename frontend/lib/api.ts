@@ -230,6 +230,120 @@ export async function crawlDocSource(
   );
 }
 
+// ── Dashboards + saved questions (Phase 26 / 27) ──
+
+export type SavedQuestion = {
+  id: string;
+  workspace_id: string;
+  dashboard_id: string | null;
+  connection_id: string | null;
+  title: string;
+  prompt: string;
+  position: number | null;
+  created_at: string;
+};
+
+export type Dashboard = {
+  id: string;
+  workspace_id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+  question_count: number;
+};
+
+export type DashboardDetail = Dashboard & {
+  questions: SavedQuestion[];
+};
+
+export async function createSavedQuestion(
+  workspace_id: string,
+  payload: {
+    title: string;
+    prompt: string;
+    dashboard_id?: string | null;
+    connection_id?: string | null;
+  },
+): Promise<SavedQuestion> {
+  return api<SavedQuestion>(
+    `/workspaces/${workspace_id}/saved-questions`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+export async function listSavedQuestions(
+  workspace_id: string,
+  dashboard_id?: string,
+): Promise<SavedQuestion[]> {
+  const qs = dashboard_id ? `?dashboard_id=${dashboard_id}` : "";
+  return api<SavedQuestion[]>(
+    `/workspaces/${workspace_id}/saved-questions${qs}`,
+  );
+}
+
+export async function deleteSavedQuestion(
+  workspace_id: string,
+  question_id: string,
+): Promise<void> {
+  const r = await fetch(
+    `${API_BASE}/workspaces/${workspace_id}/saved-questions/${question_id}`,
+    { method: "DELETE", headers: authHeader() },
+  );
+  if (!r.ok && r.status !== 204) {
+    throw new Error(`Delete failed: ${r.status}`);
+  }
+}
+
+export async function updateSavedQuestion(
+  workspace_id: string,
+  question_id: string,
+  payload: { title?: string; dashboard_id?: string | null; position?: number },
+): Promise<SavedQuestion> {
+  return api<SavedQuestion>(
+    `/workspaces/${workspace_id}/saved-questions/${question_id}`,
+    { method: "PATCH", body: JSON.stringify(payload) },
+  );
+}
+
+export async function listDashboards(
+  workspace_id: string,
+): Promise<Dashboard[]> {
+  return api<Dashboard[]>(`/workspaces/${workspace_id}/dashboards`);
+}
+
+export async function createDashboard(
+  workspace_id: string,
+  payload: { name: string; description?: string | null },
+): Promise<Dashboard> {
+  return api<Dashboard>(
+    `/workspaces/${workspace_id}/dashboards`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+export async function getDashboard(
+  workspace_id: string,
+  dashboard_id: string,
+): Promise<DashboardDetail> {
+  return api<DashboardDetail>(
+    `/workspaces/${workspace_id}/dashboards/${dashboard_id}`,
+  );
+}
+
+export async function deleteDashboard(
+  workspace_id: string,
+  dashboard_id: string,
+): Promise<void> {
+  const r = await fetch(
+    `${API_BASE}/workspaces/${workspace_id}/dashboards/${dashboard_id}`,
+    { method: "DELETE", headers: authHeader() },
+  );
+  if (!r.ok && r.status !== 204) {
+    throw new Error(`Delete failed: ${r.status}`);
+  }
+}
+
 // ── Cloud auth (Phase 18 — OneDrive device-code flow) ──
 
 export type OneDriveStartResponse = {

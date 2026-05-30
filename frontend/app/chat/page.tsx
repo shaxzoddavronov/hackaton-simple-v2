@@ -504,9 +504,32 @@ export default function ChatPage() {
         </header>
 
         <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-          {messages.map((m) => (
-            <MessageBubble key={m.id} message={m} />
-          ))}
+          {messages.map((m, i) => {
+            // For each assistant message, look back to find the
+            // immediately preceding user prompt so the Star button
+            // can save it. If there's no user message ahead of
+            // this one (e.g. workspace-clarify auto-response),
+            // pass undefined and the button hides.
+            let previousUserPrompt: string | undefined;
+            if (m.role === "assistant") {
+              for (let j = i - 1; j >= 0; j--) {
+                const prev = messages[j];
+                if (prev && prev.role === "user") {
+                  previousUserPrompt = prev.content;
+                  break;
+                }
+              }
+            }
+            return (
+              <MessageBubble
+                key={m.id}
+                message={m}
+                previousUserPrompt={previousUserPrompt}
+                workspaceId={activeWorkspaceId}
+                connectionId={activeConnectionId}
+              />
+            );
+          })}
           {streaming ? (
             <div className="text-on-surface-variant text-sm italic">
               {activeNode ? `running ${activeNode}…` : "thinking…"}

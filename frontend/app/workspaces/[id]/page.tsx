@@ -139,12 +139,18 @@ export default function WorkspaceDetailPage() {
             question based on your selection in chat.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Link
             href={`/chat?workspace=${workspaceId}`}
             className="rounded-xl bg-surface-container-high/60 border border-outline/20 text-on-surface px-4 py-2 font-semibold"
           >
             Open chat
+          </Link>
+          <Link
+            href={`/workspaces/${workspaceId}/dashboards`}
+            className="rounded-xl bg-surface-container-high/60 border border-outline/20 text-on-surface px-4 py-2 font-semibold"
+          >
+            Dashboards
           </Link>
           <label className="rounded-xl bg-surface-container-high/60 border border-outline/20 text-on-surface px-4 py-2 font-semibold cursor-pointer">
             Upload data file
