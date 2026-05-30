@@ -7,7 +7,9 @@ returned for unsupported formats so callers can skip without
 exceptions.
 
 Supported:
-  * ``.pdf``                — pypdf
+  * ``.pdf``                — pypdf for text-PDFs; pdf2image +
+    Tesseract OCR fallback when pypdf returns an empty page (scanned
+    document, image-only).
   * ``.docx``               — python-docx
   * ``.xlsx``, ``.xlsm``    — openpyxl (read each sheet as CSV-ish text)
   * ``.html``, ``.htm``     — BeautifulSoup, strip <script>/<style>
@@ -19,6 +21,11 @@ Supported:
     is auto-detected (Uzbek / Russian / English all work). Requires
     ``ffmpeg`` on PATH for non-WAV decoding — see
     ``infra/README.md`` for install notes.
+  * ``.png``, ``.jpg``/``.jpeg``, ``.tiff``/``.tif``, ``.bmp``,
+    ``.webp``               — Tesseract OCR via ``pytesseract``.
+    Multilingual: uzb+rus+eng tessdata picked up automatically when
+    the language packs are installed. See ``infra/README.md`` for
+    the Tesseract install path.
 
 The hard cap on extracted text per file is :data:`MAX_TEXT_BYTES`
 (default 1 MB). Anything beyond is truncated — embedding a 50-page
@@ -60,13 +67,33 @@ _AUDIO_EXTS = {
     ".mp4", ".mpeg", ".mpga",
 }
 
+# Raster image extensions OCRed via Tesseract. The harvester pulls
+# these out of folders / SMB shares / cloud drives like any other
+# file; downstream the chunker stores the recognised text and bge-m3
+# embeds it. Multilingual is one ``-l uzb+rus+eng`` flag away (see
+# OCR_LANGS env).
+_IMAGE_EXTS = {
+    ".png", ".jpg", ".jpeg", ".tiff", ".tif", ".bmp", ".webp",
+}
+
 # Extensions where we will produce an extraction. Used by the API
 # layer to allow-list uploads on the source side.
 SUPPORTED_EXTENSIONS = (
     _PLAIN_TEXT_EXTS
     | {".pdf", ".docx", ".xlsx", ".xlsm", ".html", ".htm"}
     | _AUDIO_EXTS
+    | _IMAGE_EXTS
 )
+
+
+# Tesseract language string. Default to uzb+rus+eng so all three
+# project-target languages work without per-source configuration.
+# Override via env if you've installed extra tessdata packs.
+OCR_LANGS = os.environ.get("OCR_LANGS", "uzb+rus+eng")
+# ``OCR_PDF_DPI`` controls the render resolution for the scanned-PDF
+# fallback. 200 DPI is a sweet spot between speed and accuracy on
+# typical receipts / forms; raise to 300 for fine print.
+OCR_PDF_DPI = int(os.environ.get("OCR_PDF_DPI", "200"))
 
 
 # MIME types for the audio formats we transcribe. ``.mp4`` is reported
@@ -123,6 +150,8 @@ def extract_text(filename: str, data: bytes) -> Optional[tuple[str, str]]:
         return _decode_text(data), "text/plain"
     if ext in _AUDIO_EXTS:
         return _extract_audio(filename, data), _mime_for_audio(ext)
+    if ext in _IMAGE_EXTS:
+        return _extract_image(data), f"image/{ext.lstrip('.')}"
     return None
 
 
@@ -130,6 +159,25 @@ def extract_text(filename: str, data: bytes) -> Optional[tuple[str, str]]:
 
 
 def _extract_pdf(data: bytes) -> str:
+    """Extract text from a PDF.
+
+    Two-pass strategy (Phase 20):
+      1. Try ``pypdf`` — fast, no system deps, works for any PDF that
+         was actually authored from text (Office exports, LaTeX, web
+         to PDF, etc.).
+      2. If pypdf returns an empty string — typical for scanned
+         documents where every page is an image — fall back to
+         rendering each page with ``pypdfium2`` and running Tesseract
+         OCR via ``pytesseract``. This is slow (~1–3 s per page on
+         CPU) but recovers text from scans the user expects to be
+         searchable.
+
+    The OCR fallback only triggers when the entire text extraction
+    came back empty, so text-PDFs don't pay the OCR cost. A
+    half-image-half-text PDF (e.g. an Office doc with a scanned
+    appendix) is still served from the text path; the scanned pages
+    contribute nothing but the rest of the document is captured.
+    """
     from pypdf import PdfReader
 
     reader = PdfReader(io.BytesIO(data))
@@ -148,7 +196,118 @@ def _extract_pdf(data: bytes) -> str:
             total += len(t.encode("utf-8"))
             if total > MAX_TEXT_BYTES:
                 break
-    return _cap(_join_paragraphs(parts))
+    text = _join_paragraphs(parts)
+
+    # Empty pypdf output → almost certainly a scan. Drop into OCR.
+    if not text.strip():
+        ocr_text = _extract_pdf_ocr(data)
+        if ocr_text:
+            return _cap(ocr_text)
+    return _cap(text)
+
+
+def _extract_pdf_ocr(data: bytes) -> str:
+    """Render every page of ``data`` and OCR it with Tesseract.
+
+    Uses ``pypdfium2`` (statically-linked PDFium fork) so there's no
+    poppler dependency on the host. Per-page text is joined with
+    paragraph separators. Bails the moment the running total crosses
+    :data:`MAX_TEXT_BYTES` — embeds + chunks are already capped, so
+    a 500-page archive doesn't sit in RAM forever.
+    """
+    try:
+        import pypdfium2 as pdfium
+    except ImportError:
+        log.warning(
+            "scanned PDF detected but pypdfium2 is not installed — "
+            "install it to enable OCR fallback"
+        )
+        return ""
+
+    parts: list[str] = []
+    total = 0
+    try:
+        doc = pdfium.PdfDocument(data)
+    except Exception as e:
+        log.warning("pypdfium2 failed to open PDF: %s", e)
+        return ""
+    try:
+        scale = OCR_PDF_DPI / 72.0  # PDF native is 72 DPI
+        for i in range(len(doc)):
+            try:
+                page = doc[i]
+                # render_to returns a PIL Image when ``PIL`` is asked
+                # for. ``render`` (no ``_to``) is the newer API; we
+                # use the version-agnostic shape.
+                pil_img = page.render(scale=scale).to_pil()
+            except Exception as e:
+                log.warning("pdf ocr: render page %d failed: %s", i, e)
+                continue
+            try:
+                page_text = _ocr_image(pil_img)
+            except Exception as e:
+                log.warning("pdf ocr: tesseract page %d failed: %s", i, e)
+                continue
+            if page_text:
+                parts.append(page_text)
+                total += len(page_text.encode("utf-8"))
+                if total > MAX_TEXT_BYTES:
+                    break
+    finally:
+        try:
+            doc.close()
+        except Exception:
+            pass
+    return _join_paragraphs(parts)
+
+
+def _extract_image(data: bytes) -> str:
+    """OCR a single image. Returns empty string when Tesseract can't
+    extract anything (blurry / no text / wrong language pack)."""
+    try:
+        from PIL import Image
+    except ImportError:
+        log.warning(
+            "image OCR requested but Pillow is not installed — "
+            "install pillow + pytesseract to enable image extraction"
+        )
+        return ""
+    try:
+        img = Image.open(io.BytesIO(data))
+    except Exception as e:
+        log.warning("image OCR: PIL failed to open: %s", e)
+        return ""
+    try:
+        text = _ocr_image(img)
+    except Exception as e:
+        log.warning("image OCR: tesseract failed: %s", e)
+        return ""
+    return _cap(text)
+
+
+def _ocr_image(pil_image) -> str:
+    """Single dispatch into Tesseract. Wraps the FileNotFoundError
+    case so a missing binary surfaces with a clear install hint."""
+    try:
+        import pytesseract
+    except ImportError as e:
+        raise RuntimeError(
+            "pytesseract not installed — pip install pytesseract"
+        ) from e
+    try:
+        return pytesseract.image_to_string(pil_image, lang=OCR_LANGS) or ""
+    except FileNotFoundError as e:
+        # Same pattern as the Whisper / ffmpeg path: turn the cryptic
+        # binary-not-found into something actionable.
+        raise RuntimeError(
+            "tesseract binary not found on PATH — install Tesseract OCR "
+            "and the language packs uzb+rus+eng. "
+            "Linux: `apt-get install tesseract-ocr tesseract-ocr-uzb "
+            "tesseract-ocr-rus`. "
+            "Windows: install from "
+            "https://github.com/UB-Mannheim/tesseract/wiki and add the "
+            "install folder to PATH."
+        ) from e
 
 
 def _extract_docx(data: bytes) -> str:

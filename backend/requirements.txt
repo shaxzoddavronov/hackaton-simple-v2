@@ -85,6 +85,15 @@ faster-whisper>=1.0.3
 # Mail.ru, Zoho, FastMail, and any RFC 3501-compliant server.
 imap_tools>=1.6
 
+# OCR for scanned PDFs and image attachments (Phase 20). Tesseract
+# itself is a system binary — install via the project README. The
+# language packs uzb / rus / eng are required for the project's
+# three target languages. ``pypdfium2`` lets us render PDF pages
+# without a poppler system dependency.
+pytesseract>=0.3.10
+pypdfium2>=4.30
+Pillow>=10.0
+
 # Agent orchestration
 langgraph
 langchain-core

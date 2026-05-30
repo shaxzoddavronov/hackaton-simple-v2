@@ -5,6 +5,73 @@
 docker compose -f infra/docker-compose.dev.yml up -d
 ```
 
+## ffmpeg (required for audio/video harvest sources)
+
+Phase 17.3 added Whisper-based transcription for `.mp3`, `.mp4`,
+`.m4a`, `.wav`, `.webm`, `.ogg`, `.opus`, `.mpeg`, and `.mpga` files
+landed by the harvester. `faster-whisper` shells out to `ffmpeg` for
+non-WAV decoding, so the binary must be on PATH wherever the Celery
+worker runs.
+
+```bash
+# Linux
+apt-get install -y ffmpeg
+
+# macOS
+brew install ffmpeg
+
+# Windows (PowerShell, admin)
+winget install Gyan.FFmpeg
+```
+
+Restart the Celery worker after installing — Python only resolves
+`ffmpeg` against the PATH that was set at process start.
+
+Tuning knobs (env vars, all optional):
+- `WHISPER_MODEL_SIZE` — `tiny | base | small | medium | large-v3`
+  (default `base`, ~140 MB multilingual).
+- `WHISPER_DEVICE` — `cpu | cuda` (default `cpu`).
+- `WHISPER_COMPUTE_TYPE` — `int8 | float16 | float32`
+  (default `int8`; `float16` is the GPU sweet spot).
+
+## Tesseract (required for OCR of scanned PDFs + image attachments)
+
+Phase 20 added Tesseract OCR for `.png`, `.jpg`, `.tiff`, `.bmp`,
+`.webp` files and a fallback OCR pass for `.pdf` files when pypdf
+returns empty text (typical for scanned documents). The Python
+binding `pytesseract` shells out to the `tesseract` binary; install
+it on the host running the Celery worker.
+
+Linux:
+```bash
+apt-get install -y tesseract-ocr tesseract-ocr-uzb tesseract-ocr-rus
+```
+
+macOS:
+```bash
+brew install tesseract tesseract-lang
+```
+
+Windows: install the [UB-Mannheim build](https://github.com/UB-Mannheim/tesseract/wiki),
+pick the "Additional language data" → Uzbek + Russian during the
+installer, and add the install folder (default
+`C:\Program Files\Tesseract-OCR`) to PATH. Restart the Celery
+worker afterwards — Python only resolves `tesseract` against the
+PATH that was set at process start.
+
+Tuning knobs (env vars, all optional):
+- `OCR_LANGS` — Tesseract `-l` argument (default `uzb+rus+eng`).
+  Add more language codes joined with `+` if you have the matching
+  tessdata packs installed.
+- `OCR_PDF_DPI` — render resolution for the scanned-PDF fallback
+  (default `200`; raise to `300` for fine print, lower to `150`
+  for speed).
+
+Without Tesseract installed the harvester still runs — image files
+are skipped with a warning and PDFs degrade to pypdf-only
+extraction (so scanned PDFs produce no text instead of crashing
+the run).
+
 ## Run migrations against the dev Postgres
 ```bash
 cd backend && alembic upgrade head

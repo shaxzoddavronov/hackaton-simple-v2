@@ -82,10 +82,12 @@ def test_extract_csv_as_text() -> None:
 
 
 def test_extract_unsupported_returns_none() -> None:
-    assert extract_text("photo.png", b"\x89PNG...") is None
-    # ``.mp4`` is now supported (audio transcription via Whisper) — see
-    # test_audio_extract.py. Use an extension we never plan to handle.
+    # ``.png`` is supported via Tesseract OCR (Phase 20) and ``.mp4``
+    # via Whisper (Phase 17.3). Use extensions we never plan to
+    # handle.
     assert extract_text("archive.zip", b"PK\x03\x04") is None
+    assert extract_text("binary.bin", b"\x00\x01\x02") is None
+    assert extract_text("noext", b"x") is None
 
 
 # ── HTML extraction ──────────────────────────────────────────────
