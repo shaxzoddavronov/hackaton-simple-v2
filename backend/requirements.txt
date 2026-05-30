@@ -101,6 +101,12 @@ Pillow>=10.0
 # the kernel/OS doesn't support push events.
 watchdog>=4.0
 
+# Snowflake dialect (Phase 28 — analytics warehouse adapter). The
+# connector is sync; the engine wraps every call in asyncio.to_thread.
+# We don't need snowflake-sqlalchemy — the bare connector covers
+# what we use.
+snowflake-connector-python>=3.6
+
 # Agent orchestration
 langgraph
 langchain-core

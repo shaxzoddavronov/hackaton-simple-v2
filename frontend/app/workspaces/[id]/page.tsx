@@ -41,6 +41,7 @@ const DIALECTS: { value: Dialect; label: string; supported: boolean }[] = [
   { value: "duckdb", label: "DuckDB", supported: true },
   { value: "mssql", label: "SQL Server", supported: true },
   { value: "rest_api", label: "REST API / CRM / 1C", supported: true },
+  { value: "snowflake", label: "Snowflake", supported: true },
 ];
 
 const REST_PRESETS: { value: string; label: string }[] = [
@@ -1412,6 +1413,12 @@ function AddConnectionPanel({
   const [mongoAuth, setMongoAuth] = useState<"none" | "password">("none");
   const [mongoTls, setMongoTls] = useState(false);
   const [mongoReplicaSet, setMongoReplicaSet] = useState("");
+  // Snowflake-specific (Phase 28)
+  const [sfAccount, setSfAccount] = useState("");
+  const [sfWarehouse, setSfWarehouse] = useState("");
+  const [sfDatabase, setSfDatabase] = useState("");
+  const [sfSchema, setSfSchema] = useState("PUBLIC");
+  const [sfRole, setSfRole] = useState("");
   // REST API specific
   const [apiBaseUrl, setApiBaseUrl] = useState("https://");
   const [apiSpecSource, setApiSpecSource] = useState<
@@ -1565,6 +1572,21 @@ function AddConnectionPanel({
           host,
           port: Number(port) || 1433,
           db_name: dbName,
+        },
+        credentials: { user, password },
+        auth_kind: "password" as const,
+      };
+    }
+    if (dialect === "snowflake") {
+      return {
+        name,
+        dialect,
+        connection_meta: {
+          account: sfAccount,
+          warehouse: sfWarehouse,
+          database: sfDatabase,
+          schema: sfSchema || "PUBLIC",
+          ...(sfRole ? { role: sfRole } : {}),
         },
         credentials: { user, password },
         auth_kind: "password" as const,
@@ -2020,6 +2042,105 @@ function AddConnectionPanel({
                 Use HTTPS
               </label>
             ) : null}
+          </>
+        ) : dialect === "snowflake" ? (
+          <>
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                Account locator
+              </span>
+              <input
+                required
+                value={sfAccount}
+                onChange={(e) => setSfAccount(e.target.value)}
+                placeholder="abc12345.eu-central-1"
+                className="w-full input font-mono text-xs"
+              />
+              <span className="text-xs text-on-surface-variant">
+                Full Snowflake account URL prefix — e.g.{" "}
+                <code>xyz12345.eu-central-1</code> or{" "}
+                <code>xyz12345.us-east-1.aws</code>.
+              </span>
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  Warehouse
+                </span>
+                <input
+                  required
+                  value={sfWarehouse}
+                  onChange={(e) => setSfWarehouse(e.target.value)}
+                  placeholder="ANALYTICS_WH"
+                  className="w-full input"
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  Database
+                </span>
+                <input
+                  required
+                  value={sfDatabase}
+                  onChange={(e) => setSfDatabase(e.target.value)}
+                  placeholder="ANALYTICS"
+                  className="w-full input"
+                />
+              </label>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  Schema
+                </span>
+                <input
+                  required
+                  value={sfSchema}
+                  onChange={(e) => setSfSchema(e.target.value)}
+                  placeholder="PUBLIC"
+                  className="w-full input"
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  Role (optional)
+                </span>
+                <input
+                  value={sfRole}
+                  onChange={(e) => setSfRole(e.target.value)}
+                  placeholder="READ_ONLY"
+                  className="w-full input"
+                />
+              </label>
+            </div>
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                User
+              </span>
+              <input
+                required
+                value={user}
+                onChange={(e) => setUser(e.target.value)}
+                className="w-full input"
+              />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                Password
+              </span>
+              <input
+                required
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full input"
+              />
+              <span className="text-xs text-on-surface-variant">
+                Snowflake also supports key-pair auth — paste a PEM
+                private key in this field if your account requires it
+                (recommended for production read-only service users).
+              </span>
+            </label>
           </>
         ) : dialect === "mongodb" ? (
           <>

@@ -334,7 +334,7 @@ class WorkspaceConnection(Base):
         CheckConstraint(
             "dialect IN ('postgres','sqlite','mysql','clickhouse',"
             "'oracle','mongodb','elasticsearch','duckdb','mssql',"
-            "'rest_api')",
+            "'rest_api','snowflake')",
             name="ck_workspace_connections_dialect",
         ),
         CheckConstraint(
@@ -537,7 +537,7 @@ class QueryHistory(Base):
         CheckConstraint(
             "dialect IN ('postgres','sqlite','mysql','clickhouse',"
             "'oracle','mongodb','elasticsearch','duckdb','mssql',"
-            "'rest_api')",
+            "'rest_api','snowflake')",
             name="ck_query_history_dialect",
         ),
         CheckConstraint(

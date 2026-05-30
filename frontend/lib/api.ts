@@ -91,7 +91,8 @@ export type Dialect =
   | "elasticsearch"
   | "duckdb"
   | "mssql"
-  | "rest_api";
+  | "rest_api"
+  | "snowflake";
 
 export type AuthKind =
   | "password"
