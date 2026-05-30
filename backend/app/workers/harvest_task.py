@@ -35,6 +35,7 @@ from app.services.doc_harvest import (
     harvest_gdrive,
     harvest_imap,
     harvest_onedrive,
+    harvest_slack_export,
     harvest_smb,
     walk_folder,
 )
@@ -157,6 +158,18 @@ async def _harvest_async(source_id: UUID) -> dict[str, int]:
                     port=port,
                 ):
                     yield fname, data, None
+            elif kind == "slack":
+                # Slack export ZIP. Source supplies either ``zip_b64``
+                # (user upload) or ``zip_path`` (server-local). Both
+                # yield natively as 3-tuples with thread-scoped
+                # row_context.
+                only_channels = config.get("only_channels") or None
+                async for fname, data, ctx in harvest_slack_export(
+                    zip_path=config.get("zip_path") or None,
+                    zip_b64=config.get("zip_b64") or None,
+                    only_channels=only_channels,
+                ):
+                    yield fname, data, ctx
             elif kind == "imap":
                 # IMAP harvester yields 3-tuples natively — each email
                 # body + attachment carries a synthetic row_context

@@ -170,7 +170,8 @@ export type DocSourceKind =
   | "smb"
   | "gdrive"
   | "onedrive"
-  | "imap";
+  | "imap"
+  | "slack";
 export type DocSourceStatus = "idle" | "harvesting" | "ready" | "error";
 
 export type DocSource = {

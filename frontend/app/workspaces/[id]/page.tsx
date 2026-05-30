@@ -266,6 +266,7 @@ const DOC_SOURCE_KIND_LABEL: Record<DocSourceKind, string> = {
   gdrive: "Google Drive",
   onedrive: "OneDrive",
   imap: "Email (IMAP)",
+  slack: "Slack export",
 };
 
 function DocSourcesSection({ workspaceId }: { workspaceId: string }) {
@@ -475,6 +476,10 @@ function AddDocSourcePanel({
   const [imapSinceDays, setImapSinceDays] = useState("90");
   const [imapMaxMessages, setImapMaxMessages] = useState("500");
   const [imapIncludeAttachments, setImapIncludeAttachments] = useState(true);
+  // slack (Phase 21)
+  const [slackZipB64, setSlackZipB64] = useState("");
+  const [slackFilename, setSlackFilename] = useState("");
+  const [slackOnlyChannels, setSlackOnlyChannels] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function runOneDriveAuth() {
@@ -629,6 +634,20 @@ function AddDocSourcePanel({
           max_messages: Number(imapMaxMessages) || 500,
           include_attachments: imapIncludeAttachments,
         };
+      } else if (kind === "slack") {
+        if (!slackZipB64) {
+          toast.error("Upload a Slack export ZIP first");
+          setBusy(false);
+          return;
+        }
+        const channels = slackOnlyChannels
+          .split(/[,\s]+/)
+          .map((c) => c.trim())
+          .filter(Boolean);
+        config = {
+          zip_b64: slackZipB64,
+          ...(channels.length ? { only_channels: channels } : {}),
+        };
       }
       await createDocSource(workspaceId, {
         name,
@@ -688,6 +707,7 @@ function AddDocSourcePanel({
                 { v: "gdrive", label: "Google Drive" },
                 { v: "onedrive", label: "OneDrive" },
                 { v: "imap", label: "Email (IMAP)" },
+                { v: "slack", label: "Slack export" },
               ] as const
             ).map((m) => (
               <button
@@ -1218,6 +1238,73 @@ function AddDocSourcePanel({
               </a>
               .
             </div>
+          </>
+        ) : null}
+
+        {kind === "slack" ? (
+          <>
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                Slack export ZIP
+              </span>
+              <input
+                required
+                type="file"
+                accept=".zip,application/zip"
+                onChange={async (e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = "";
+                  if (!f) {
+                    setSlackZipB64("");
+                    setSlackFilename("");
+                    return;
+                  }
+                  setSlackFilename(f.name);
+                  const buf = await f.arrayBuffer();
+                  const bytes = new Uint8Array(buf);
+                  let bin = "";
+                  for (let i = 0; i < bytes.length; i++) {
+                    bin += String.fromCharCode(bytes[i] as number);
+                  }
+                  setSlackZipB64(btoa(bin));
+                }}
+                className="w-full input"
+              />
+              {slackFilename ? (
+                <span className="text-xs text-tertiary">
+                  Loaded {slackFilename} (
+                  {Math.round((slackZipB64.length * 3) / 4 / 1024 / 1024)} MB)
+                </span>
+              ) : null}
+              <span className="text-xs text-on-surface-variant">
+                Slack admin → Settings &amp; administration →{" "}
+                <a
+                  href="https://slack.com/help/articles/201658943"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary underline"
+                >
+                  Export workspace data
+                </a>
+                . Download the ZIP and drop it here. Each thread
+                becomes one RAG document linked back to its
+                channel + parent message.
+              </span>
+            </label>
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                Only these channels (optional, comma-separated)
+              </span>
+              <input
+                value={slackOnlyChannels}
+                onChange={(e) => setSlackOnlyChannels(e.target.value)}
+                placeholder="engineering, product, support"
+                className="w-full input"
+              />
+              <span className="text-xs text-on-surface-variant">
+                Leave blank to crawl every channel in the export.
+              </span>
+            </label>
           </>
         ) : null}
 

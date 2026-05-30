@@ -1317,3 +1317,284 @@ def _safe_email_slug(s: str) -> str:
     if not out:
         out = "noname"
     return out[:60]
+
+
+# ── Slack workspace export (Phase 21) ─────────────────────────────
+
+
+async def harvest_slack_export(
+    *,
+    zip_path: str | None = None,
+    zip_b64: str | None = None,
+    only_channels: list[str] | None = None,
+) -> AsyncIterator[tuple[str, bytes, dict]]:
+    """Crawl a Slack workspace ZIP export and yield each thread as
+    one ``.txt`` "document".
+
+    Slack's standard "Export workspace data" feature produces a ZIP
+    with this layout::
+
+        users.json
+        channels.json
+        groups.json (optional)
+        <channel_name>/
+            2026-03-14.json
+            2026-03-15.json
+            ...
+
+    Each daily JSON is a list of message dicts: ``{user, ts, text,
+    thread_ts?, files?, attachments?, replies?}``. We group messages
+    by ``thread_ts`` (or the message's own ``ts`` for unthreaded
+    messages), so one Slack thread → one chunked document. That
+    keeps semantic context together for the embedder: a 5-reply
+    thread asking "should we approve this PR?" becomes one chunk
+    instead of 5 disconnected snippets.
+
+    Yields 3-tuples ``(filename, bytes, row_context)`` where the
+    row_context follows the Phase 17.1 / 19 pattern::
+
+        {
+          "connection_id":  "slack:<export_filename>",
+          "table":          "slack_thread",
+          "row_pk":         {"channel": "engineering", "ts": "1710000000.000001"},
+          "extras":         {"channel_name", "date", "first_user",
+                             "message_count", "reply_count"},
+          "file_column":    "thread",
+          "file_reference": "<channel>#<date>#<first 60 chars>",
+        }
+
+    User IDs (``U12345``) are resolved to real names + handles via
+    the export's ``users.json``. Files / image attachments listed
+    in messages are skipped by default — they require a Slack bot
+    token to download, which the export ZIP doesn't include. The
+    text of the message + every reply IS captured.
+
+    Source supplied either as ``zip_path`` (server-local file) or
+    ``zip_b64`` (base64-encoded ZIP bytes from a user upload).
+    ``only_channels`` restricts the crawl when set; defaults to
+    every channel in the export.
+    """
+    import base64 as _base64
+    import json as _json
+    import tempfile
+    import zipfile
+    from pathlib import Path as _Path
+
+    if not zip_path and not zip_b64:
+        raise ValueError(
+            "slack source requires either 'zip_path' or 'zip_b64'"
+        )
+
+    # Materialise the ZIP on disk — ZipFile accepts a file path or a
+    # file-like, but tempdir-on-disk lets us pipe through pathlib for
+    # the channel walk without buffering the whole archive in RAM.
+    tmpdir = tempfile.mkdtemp(prefix="slack_export_")
+    cleanup_tmpdir = True
+    try:
+        if zip_path:
+            archive_path = _Path(zip_path)
+            source_label = archive_path.name
+        else:
+            archive_path = _Path(tmpdir) / "export.zip"
+            archive_path.write_bytes(
+                _base64.b64decode(zip_b64, validate=True)
+            )
+            source_label = "uploaded_export.zip"
+
+        if not archive_path.is_file():
+            raise FileNotFoundError(
+                f"slack export archive not found: {archive_path}"
+            )
+
+        extract_dir = _Path(tmpdir) / "extracted"
+        extract_dir.mkdir(exist_ok=True)
+        with zipfile.ZipFile(archive_path) as zf:
+            # Defence: cap the uncompressed size to MAX_DOCS_PER_HARVEST
+            # × 1 MB, so a malicious export doesn't fill the disk.
+            total_uncomp = sum(zi.file_size for zi in zf.infolist())
+            if total_uncomp > 2 * 1024 * 1024 * 1024:
+                raise ValueError(
+                    f"slack export uncompressed size "
+                    f"{total_uncomp / (1024 ** 3):.1f} GB exceeds 2 GB cap"
+                )
+            zf.extractall(extract_dir)
+
+        # Load users.json for ID → name resolution.
+        users_map: dict[str, str] = {}
+        users_file = extract_dir / "users.json"
+        if users_file.is_file():
+            try:
+                for u in _json.loads(users_file.read_text("utf-8")):
+                    if not isinstance(u, dict):
+                        continue
+                    uid = u.get("id") or ""
+                    profile = u.get("profile") or {}
+                    name = (
+                        profile.get("real_name")
+                        or profile.get("display_name")
+                        or u.get("name")
+                        or uid
+                    )
+                    users_map[uid] = str(name)
+            except Exception as e:
+                log.warning(
+                    "slack export: users.json parse failed: %s", e
+                )
+
+        only_set = set(only_channels) if only_channels else None
+        yielded = 0
+
+        # Walk channel directories. The export sometimes nests channel
+        # JSON inside ``general/`` etc; iterate every immediate child
+        # of extract_dir that's a directory.
+        for channel_dir in sorted(extract_dir.iterdir()):
+            if not channel_dir.is_dir():
+                continue
+            channel_name = channel_dir.name
+            if only_set is not None and channel_name not in only_set:
+                continue
+
+            # Collect every message from every daily JSON in this
+            # channel, then group by thread_ts.
+            messages: list[dict] = []
+            for daily in sorted(channel_dir.glob("*.json")):
+                try:
+                    raw = _json.loads(daily.read_text("utf-8"))
+                except Exception as e:
+                    log.warning(
+                        "slack export: %s parse failed: %s", daily, e
+                    )
+                    continue
+                if isinstance(raw, list):
+                    messages.extend(raw)
+
+            threads = _group_slack_threads(messages)
+            for thread_ts, thread in threads.items():
+                if yielded >= MAX_DOCS_PER_HARVEST:
+                    log.info(
+                        "slack export: hit %d-doc cap; stopping",
+                        MAX_DOCS_PER_HARVEST,
+                    )
+                    return
+                text, first_user, first_date = _format_slack_thread(
+                    thread, users_map
+                )
+                if not text.strip():
+                    continue
+                blob = text.encode("utf-8")
+                if len(blob) > MAX_FILE_BYTES:
+                    blob = blob[:MAX_FILE_BYTES]
+                ctx = {
+                    "connection_id": f"slack:{source_label}",
+                    "table": "slack_thread",
+                    "row_pk": {
+                        "channel": channel_name,
+                        "ts": thread_ts,
+                    },
+                    "extras": {
+                        "channel_name": channel_name,
+                        "date": first_date,
+                        "first_user": first_user,
+                        "message_count": len(thread),
+                        "reply_count": max(0, len(thread) - 1),
+                    },
+                    "file_column": "thread",
+                    "file_reference": (
+                        f"#{channel_name} {first_date} "
+                        f"{text[:60].replace(chr(10), ' ')}"
+                    ),
+                }
+                fname = (
+                    f"slack_{channel_name}_"
+                    f"{thread_ts.replace('.', '_')}.txt"
+                )
+                yield fname, blob, ctx
+                yielded += 1
+    finally:
+        if cleanup_tmpdir:
+            import shutil
+
+            try:
+                shutil.rmtree(tmpdir, ignore_errors=True)
+            except Exception:
+                pass
+
+
+def _group_slack_threads(
+    messages: list[dict],
+) -> dict[str, list[dict]]:
+    """Bucket a flat list of Slack messages into threads keyed by
+    the parent ``ts`` (or the message's own ``ts`` when unthreaded).
+
+    Slack uses ``thread_ts`` on every reply and on the parent
+    message; standalone messages have only ``ts``. Sort each thread
+    by ``ts`` ascending so the parent comes first.
+    """
+    threads: dict[str, list[dict]] = {}
+    for msg in messages:
+        if not isinstance(msg, dict):
+            continue
+        # Skip channel-system messages (joins, name changes, etc.) —
+        # they're noise for retrieval and have no human content.
+        subtype = msg.get("subtype")
+        if subtype in (
+            "channel_join", "channel_leave", "channel_topic",
+            "channel_purpose", "channel_name", "channel_archive",
+        ):
+            continue
+        ts = msg.get("thread_ts") or msg.get("ts") or ""
+        if not ts:
+            continue
+        threads.setdefault(ts, []).append(msg)
+    for ts in threads:
+        threads[ts].sort(key=lambda m: m.get("ts") or "")
+    return threads
+
+
+def _format_slack_thread(
+    thread: list[dict], users_map: dict[str, str]
+) -> tuple[str, str, str]:
+    """Render a thread as plain text suitable for embedding.
+
+    Returns ``(text, first_user_label, first_date_iso)``. The
+    first_user / first_date land in the row_context.extras so the
+    citation panel can show "from @alice on 2026-03-14" without
+    re-parsing the chunk.
+    """
+    from datetime import datetime, timezone
+
+    parts: list[str] = []
+    first_user = ""
+    first_date = ""
+    for i, msg in enumerate(thread):
+        ts = msg.get("ts") or ""
+        text = msg.get("text") or ""
+        user_id = msg.get("user") or msg.get("bot_id") or ""
+        user_label = users_map.get(user_id, user_id) if user_id else "(unknown)"
+
+        try:
+            when = datetime.fromtimestamp(float(ts), tz=timezone.utc)
+            date_str = when.replace(microsecond=0).isoformat()
+        except (ValueError, TypeError):
+            date_str = ts
+
+        if i == 0:
+            first_user = user_label
+            first_date = date_str
+
+        prefix = "" if i == 0 else "↳ "
+        parts.append(f"{prefix}{user_label} ({date_str}):\n{text}")
+
+        # Slack's ``files`` field lists attachments without their
+        # bodies (those need a token). Mention the filename so the
+        # embedder sees there was an attachment + searchable name.
+        for f in msg.get("files") or []:
+            if not isinstance(f, dict):
+                continue
+            fname = f.get("name") or f.get("title") or "(file)"
+            mimetype = f.get("mimetype") or ""
+            parts.append(
+                f"  [attachment: {fname} ({mimetype})]"
+            )
+
+    return "\n\n".join(parts), first_user, first_date

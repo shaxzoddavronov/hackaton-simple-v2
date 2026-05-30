@@ -40,7 +40,8 @@ router = APIRouter(prefix="/workspaces", tags=["doc-sources"])
 
 
 SourceKind = Literal[
-    "folder", "url_list", "db_column", "smb", "gdrive", "onedrive", "imap"
+    "folder", "url_list", "db_column", "smb", "gdrive", "onedrive",
+    "imap", "slack",
 ]
 SourceStatus = Literal["idle", "harvesting", "ready", "error"]
 
@@ -177,6 +178,28 @@ def _validate_config(kind: str, config: dict[str, Any]) -> None:
                     status.HTTP_400_BAD_REQUEST,
                     detail=f"imap source '{key}' must be an integer",
                 )
+    elif kind == "slack":
+        # Exactly one of zip_b64 / zip_path must be set. zip_b64 is
+        # the standard UI path (user uploads the ZIP, frontend
+        # base64-encodes it). zip_path is the server-local fast path
+        # for an admin who's already dropped the export on disk.
+        has_b64 = isinstance(config.get("zip_b64"), str) and config["zip_b64"]
+        has_path = isinstance(config.get("zip_path"), str) and config["zip_path"]
+        if has_b64 == has_path:  # both true or both false
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "slack source requires exactly one of 'zip_b64' "
+                    "(upload) or 'zip_path' (server-local)"
+                ),
+            )
+        if "only_channels" in config and not isinstance(
+            config["only_channels"], list
+        ):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="slack source 'only_channels' must be a list of strings",
+            )
 
 
 def _enqueue_harvest(source_id: str) -> None:
