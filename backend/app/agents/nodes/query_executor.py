@@ -12,6 +12,7 @@ from app.db.models import WorkspaceConnection, WorkspaceCredentials
 from app.engines import register_all as register_engines
 from app.engines.registry import get_engine
 from app.services import crypto
+from app.services.query_cache import get_cached, set_cached
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +28,25 @@ async def run(state: GraphState) -> GraphState:
 
     register_engines()
     sql_to_run = validation.rewritten_sql or plan.sql
+
+    # Phase 23 — try the cache first. Hit returns immediately, skipping
+    # both the credential decrypt + engine construction (worth ~50 ms
+    # on a warm connection) AND the DB round-trip itself. Miss falls
+    # through to the full execute path; we populate the cache after
+    # success.
+    cache_conn_id = str(connection_id)
+    cached_rs = await get_cached(cache_conn_id, sql_to_run)
+    if cached_rs is not None:
+        log.info(
+            "query_executor: cache HIT conn=%s sql=%s",
+            cache_conn_id, sql_to_run[:80],
+        )
+        return {
+            "result": cached_rs,
+            "sql_executed": sql_to_run,
+            "executor_attempts": attempts,
+            "last_executor_error": None,
+        }
 
     sa_engine = create_async_engine(settings.DATABASE_URL, pool_pre_ping=True)
     Session = async_sessionmaker(sa_engine, expire_on_commit=False)
@@ -83,6 +103,13 @@ async def run(state: GraphState) -> GraphState:
         }
     finally:
         await engine.aclose()
+
+    # Populate the cache. Best-effort — a Redis hiccup must never
+    # poison the user's chat response.
+    try:
+        await set_cached(cache_conn_id, sql_to_run, rs)
+    except Exception as e:  # pragma: no cover — defensive
+        log.warning("query_executor: cache set failed: %s", e)
 
     return {
         "result": rs,

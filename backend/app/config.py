@@ -52,7 +52,31 @@ class Settings(BaseSettings):
     # --- Auth --------------------------------------------------------------------
     JWT_SECRET: str = Field(default="dev-insecure-change-me")
     JWT_ALG: str = Field(default="HS256")
-    JWT_EXPIRES_MIN: int = Field(default=60, ge=1)
+    # Access-token life. Short (15 min) so a leak limits damage; the
+    # client transparently refreshes via the refresh token.
+    JWT_EXPIRES_MIN: int = Field(default=15, ge=1)
+    # Refresh-token life. 30 days matches the common SaaS default; long
+    # enough that a power-user doesn't re-login weekly, short enough
+    # that a forgotten device times out.
+    REFRESH_TOKEN_EXPIRES_DAYS: int = Field(default=30, ge=1)
+    # Password complexity (Phase 16). Enforced at register / password-
+    # change time. Default tuned for hackathon usability, raise in prod.
+    PASSWORD_MIN_LENGTH: int = Field(default=8, ge=4)
+    PASSWORD_REQUIRE_DIGIT: bool = Field(default=True)
+    PASSWORD_REQUIRE_UPPER: bool = Field(default=False)
+
+    # --- Bootstrap super-user ----------------------------------------------------
+    # Phase 16 closes ``POST /auth/register`` to anonymous traffic;
+    # only super-users may create accounts. To avoid a chicken-and-egg
+    # on a fresh DB, the app startup hook seeds the first super-user
+    # from these env vars iff no super-user exists yet. After that the
+    # vars are ignored.
+    QM_BOOTSTRAP_SUPERUSER_USERNAME: str = Field(default="admin")
+    # Pydantic ``EmailStr`` (used by /auth/me) requires a TLD-shaped
+    # host, so ``admin@local`` doesn't pass — default to ``.local``
+    # which Pydantic accepts and is a well-known reserved suffix.
+    QM_BOOTSTRAP_SUPERUSER_EMAIL: str = Field(default="admin@admin.local")
+    QM_BOOTSTRAP_SUPERUSER_PASSWORD: str = Field(default="")
 
     # --- Credential-at-rest encryption ------------------------------------------
     # Url-safe base64-encoded 32-byte key. See `.env.example` for a generator.
@@ -116,6 +140,21 @@ class Settings(BaseSettings):
     # Hard cap on the post-merge ResultSet. A bad join can multiply row
     # counts; we truncate at this many rows and set `truncated=True`.
     FEDERATION_MAX_ROWS: int = Field(default=1000, ge=1)
+
+    # --- Query result cache (Phase 23) -----------------------------------------
+    # Redis-backed cache for executor results. Repeated questions
+    # (chat refresh, dashboard reload, the same workflow twice in a
+    # row) hit the DB once and then read from memory until TTL.
+    QUERY_CACHE_ENABLED: bool = Field(default=True)
+    # Default 300 s. Raise to hours for analytics warehouses; lower
+    # to seconds for live OLTP where the data churns.
+    QUERY_CACHE_TTL_S: int = Field(default=300, ge=1)
+    # Don't bother caching huge result sets — Redis isn't a row store.
+    QUERY_CACHE_MAX_ROWS: int = Field(default=5000, ge=1)
+    # Hard byte ceiling on the serialised payload. 2 MB is well below
+    # Redis's 512 MB string limit but enough for ~5000 rows of
+    # typical analytics output.
+    QUERY_CACHE_MAX_BYTES: int = Field(default=2 * 1024 * 1024, ge=1)
 
 
 @lru_cache(maxsize=1)

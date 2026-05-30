@@ -453,6 +453,15 @@ async def delete_connection(
     )
     await session.delete(conn)
     await session.commit()
+    # Phase 23 — drop any cached results tied to this connection so
+    # a future connection reusing the same ID (rare but possible)
+    # can never inherit stale rows.
+    from app.services.query_cache import invalidate_connection as _qc_inv
+
+    try:
+        await _qc_inv(str(connection_id))
+    except Exception:  # pragma: no cover — best-effort
+        pass
 
 
 @router.post(
@@ -475,6 +484,15 @@ async def refresh_connection(
     await session.commit()
     await session.refresh(job)
     _enqueue_profile_job(str(conn.id), str(job.id))
+    # Phase 23 — purge cached results. A re-profile usually means
+    # the schema changed; serving an old row shape after that would
+    # surface as "columns my chart expects don't exist".
+    from app.services.query_cache import invalidate_connection as _qc_inv
+
+    try:
+        await _qc_inv(str(connection_id))
+    except Exception:  # pragma: no cover — best-effort
+        pass
     return ConnectionOut(
         id=str(conn.id),
         workspace_id=str(conn.workspace_id),
