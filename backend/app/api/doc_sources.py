@@ -228,6 +228,22 @@ def _enqueue_harvest(source_id: str) -> None:
     run_harvest_doc_source.delay(source_id)
 
 
+async def _refresh_watcher() -> None:
+    """Re-sync the real-time file watcher's observer set against the
+    current DB state (Phase 24). Called after create / delete so
+    folder sources start / stop being watched immediately.
+
+    Best-effort: if watchdog isn't installed (CPU-only dev box) the
+    supervisor's ``reload`` is a no-op and the daily Celery beat
+    still picks up changes once a day."""
+    try:
+        from app.services.file_watcher import get_supervisor
+
+        await get_supervisor().reload()
+    except Exception as e:
+        log.warning("file_watcher: reload failed: %s", e)
+
+
 @router.post(
     "/{workspace_id}/doc-sources",
     response_model=DocSourceOut,
@@ -259,6 +275,11 @@ async def create_doc_source(
             detail="a doc source with this name already exists in this workspace",
         ) from exc
     await session.refresh(src)
+    # Re-arm the file watcher if this was a folder source so the
+    # user gets real-time updates without waiting for the next
+    # daily beat tick.
+    if payload.source_kind == "folder":
+        await _refresh_watcher()
     return _to_out(src)
 
 
@@ -304,8 +325,11 @@ async def delete_doc_source(
             RagChunk.source_key.like(f"docsource:{source_id}:%"),
         )
     )
+    src_kind = src.source_kind
     await session.delete(src)
     await session.commit()
+    if src_kind == "folder":
+        await _refresh_watcher()
 
 
 @router.post(

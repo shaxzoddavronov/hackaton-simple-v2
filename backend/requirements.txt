@@ -94,6 +94,13 @@ pytesseract>=0.3.10
 pypdfium2>=4.30
 Pillow>=10.0
 
+# Real-time file system watcher (Phase 24 — folder DocSources get
+# inotify/FSEvents/ReadDirectoryChangesW push notifications so a
+# new file lands in RAG within seconds instead of waiting for the
+# daily Celery-beat crawl). Falls back to cron-only behaviour when
+# the kernel/OS doesn't support push events.
+watchdog>=4.0
+
 # Agent orchestration
 langgraph
 langchain-core
