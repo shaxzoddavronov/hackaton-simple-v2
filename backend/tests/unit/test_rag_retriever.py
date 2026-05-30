@@ -172,7 +172,12 @@ async def test_retrieve_global_chunks_with_include_global(session, seeded, monke
 
 
 @pytest.mark.asyncio
-async def test_retrieve_returns_empty_on_triton_failure(session, seeded, monkeypatch):
+async def test_retrieve_falls_back_to_bm25_on_triton_failure(
+    session, seeded, monkeypatch,
+):
+    """Phase 25 — when Triton blows up, dense returns empty but the
+    lexical BM25 path still answers. The agent stays useful instead
+    of returning nothing."""
     _install_fake(monkeypatch, _FailingTriton())
     hits = await retrieve(
         session,
@@ -180,7 +185,10 @@ async def test_retrieve_returns_empty_on_triton_failure(session, seeded, monkeyp
         workspace_id=seeded["workspace_id"],
         top_k=3,
     )
-    assert hits == []
+    # BM25 should still find the seeded "orders" chunk by exact-
+    # term match.
+    keys = [h.source_key for h in hits]
+    assert "public.orders" in keys
 
 
 @pytest.mark.asyncio
