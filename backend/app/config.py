@@ -141,6 +141,21 @@ class Settings(BaseSettings):
     # counts; we truncate at this many rows and set `truncated=True`.
     FEDERATION_MAX_ROWS: int = Field(default=1000, ge=1)
 
+    # --- SMTP — scheduled report email delivery (Phase 29) ---------------------
+    # When SMTP_HOST is empty, scheduled reports raise a clear error
+    # and the operator sees it surfaced as the schedule's
+    # ``last_error``. Local dev can point at a Mailpit / Mailhog
+    # container on :1025 with SMTP_TLS=false.
+    SMTP_HOST: str = Field(default="")
+    SMTP_PORT: int = Field(default=587, ge=1, le=65535)
+    SMTP_USER: str = Field(default="")
+    SMTP_PASSWORD: str = Field(default="")
+    SMTP_FROM: str = Field(default="")
+    SMTP_TLS: bool = Field(default=True)
+    # Public base URL the report email links back to so recipients
+    # can open the live dashboard. Empty → links omitted.
+    PUBLIC_BASE_URL: str = Field(default="")
+
     # --- Query result cache (Phase 23) -----------------------------------------
     # Redis-backed cache for executor results. Repeated questions
     # (chat refresh, dashboard reload, the same workflow twice in a

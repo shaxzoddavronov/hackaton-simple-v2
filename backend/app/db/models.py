@@ -839,6 +839,65 @@ class Dashboard(Base):
     )
 
 
+class ReportSchedule(Base):
+    """A periodic email summary of a Dashboard's saved questions.
+
+    Phase 29 — admin "stars" a dashboard for daily / weekly / cron
+    delivery. The schedule's owner_id receives the email; multiple
+    extra recipients can be CC'd via ``recipients`` (comma-separated
+    addresses). At each fire the Celery beat dispatcher re-runs every
+    saved question in the dashboard, renders an HTML digest, and
+    delivers via SMTP.
+    """
+
+    __tablename__ = "report_schedules"
+
+    id: Mapped[UUID] = mapped_column(
+        UUIDType, primary_key=True, server_default=_UUID_DEFAULT
+    )
+    owner_id: Mapped[UUID] = mapped_column(
+        UUIDType,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    workspace_id: Mapped[UUID] = mapped_column(
+        UUIDType,
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    dashboard_id: Mapped[UUID] = mapped_column(
+        UUIDType,
+        ForeignKey("dashboards.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # Standard 5-field cron expression: ``minute hour dom month dow``.
+    # Validated at API layer with the croniter package.
+    cron: Mapped[str] = mapped_column(String(64), nullable=False)
+    # CSV of email addresses beyond the owner. Empty string = owner only.
+    recipients: Mapped[str] = mapped_column(
+        String(2048), nullable=False, server_default=text("''")
+    )
+    enabled: Mapped[bool] = mapped_column(
+        nullable=False, server_default=text("true")
+    )
+    last_fired_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_status: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_report_schedules_workspace_id", "workspace_id"),
+        Index("ix_report_schedules_dashboard_id", "dashboard_id"),
+        Index("ix_report_schedules_enabled", "enabled"),
+    )
+
+
 class SavedQuestion(Base):
     """A natural-language question the user starred for re-running.
 
@@ -915,4 +974,5 @@ __all__ = [
     "DocSource",
     "Dashboard",
     "SavedQuestion",
+    "ReportSchedule",
 ]

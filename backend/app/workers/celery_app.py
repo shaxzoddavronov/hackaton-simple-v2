@@ -14,6 +14,7 @@ celery_app = Celery(
         "app.workers.index_task",
         "app.workers.diff_task",
         "app.workers.harvest_task",
+        "app.workers.report_task",
     ],
 )
 
@@ -62,5 +63,13 @@ celery_app.conf.beat_schedule = {
             minute=settings.RAG_DIFF_CHECK_MINUTE_UTC,
             hour=settings.RAG_DIFF_CHECK_HOUR_UTC,
         ),
+    },
+    # Phase 29 — once-a-minute sweep over report_schedules. Each
+    # individual schedule has its OWN cron; this sweep is just the
+    # "any due?" tick. We can't put each schedule as its own beat
+    # entry because they're DB rows, not config.
+    "reports-due-sweep": {
+        "task": "app.workers.report_task.run_due_report_schedules",
+        "schedule": crontab(minute="*"),
     },
 }

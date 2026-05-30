@@ -107,6 +107,11 @@ watchdog>=4.0
 # what we use.
 snowflake-connector-python>=3.6
 
+# Scheduled-report cron evaluator (Phase 29). Celery ships croniter
+# transitively but pinning here makes ReportSchedule's "is this due?"
+# check explicit and surfaces a clear error if it gets uninstalled.
+croniter>=1.4
+
 # Agent orchestration
 langgraph
 langchain-core
