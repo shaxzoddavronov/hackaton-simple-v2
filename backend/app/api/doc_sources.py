@@ -41,7 +41,7 @@ router = APIRouter(prefix="/workspaces", tags=["doc-sources"])
 
 SourceKind = Literal[
     "folder", "url_list", "db_column", "smb", "gdrive", "onedrive",
-    "imap", "slack",
+    "imap", "slack", "telegram",
 ]
 SourceStatus = Literal["idle", "harvesting", "ready", "error"]
 
@@ -199,6 +199,25 @@ def _validate_config(kind: str, config: dict[str, Any]) -> None:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
                 detail="slack source 'only_channels' must be a list of strings",
+            )
+    elif kind == "telegram":
+        # Telegram Desktop's "Export chat history → JSON" produces a
+        # single ``result.json``. Same XOR semantics as slack:
+        # exactly one of json_b64 (upload) or json_path (server-
+        # local).
+        has_b64 = (
+            isinstance(config.get("json_b64"), str) and config["json_b64"]
+        )
+        has_path = (
+            isinstance(config.get("json_path"), str) and config["json_path"]
+        )
+        if has_b64 == has_path:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    "telegram source requires exactly one of 'json_b64' "
+                    "(upload) or 'json_path' (server-local)"
+                ),
             )
 
 

@@ -267,6 +267,7 @@ const DOC_SOURCE_KIND_LABEL: Record<DocSourceKind, string> = {
   onedrive: "OneDrive",
   imap: "Email (IMAP)",
   slack: "Slack export",
+  telegram: "Telegram export",
 };
 
 function DocSourcesSection({ workspaceId }: { workspaceId: string }) {
@@ -480,6 +481,9 @@ function AddDocSourcePanel({
   const [slackZipB64, setSlackZipB64] = useState("");
   const [slackFilename, setSlackFilename] = useState("");
   const [slackOnlyChannels, setSlackOnlyChannels] = useState("");
+  // telegram (Phase 22)
+  const [telegramJsonB64, setTelegramJsonB64] = useState("");
+  const [telegramFilename, setTelegramFilename] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function runOneDriveAuth() {
@@ -648,6 +652,13 @@ function AddDocSourcePanel({
           zip_b64: slackZipB64,
           ...(channels.length ? { only_channels: channels } : {}),
         };
+      } else if (kind === "telegram") {
+        if (!telegramJsonB64) {
+          toast.error("Upload the Telegram result.json first");
+          setBusy(false);
+          return;
+        }
+        config = { json_b64: telegramJsonB64 };
       }
       await createDocSource(workspaceId, {
         name,
@@ -708,6 +719,7 @@ function AddDocSourcePanel({
                 { v: "onedrive", label: "OneDrive" },
                 { v: "imap", label: "Email (IMAP)" },
                 { v: "slack", label: "Slack export" },
+                { v: "telegram", label: "Telegram export" },
               ] as const
             ).map((m) => (
               <button
@@ -1306,6 +1318,49 @@ function AddDocSourcePanel({
               </span>
             </label>
           </>
+        ) : null}
+
+        {kind === "telegram" ? (
+          <label className="block space-y-1">
+            <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              Telegram chat export JSON
+            </span>
+            <input
+              required
+              type="file"
+              accept=".json,application/json"
+              onChange={async (e) => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (!f) {
+                  setTelegramJsonB64("");
+                  setTelegramFilename("");
+                  return;
+                }
+                setTelegramFilename(f.name);
+                const buf = await f.arrayBuffer();
+                const bytes = new Uint8Array(buf);
+                let bin = "";
+                for (let i = 0; i < bytes.length; i++) {
+                  bin += String.fromCharCode(bytes[i] as number);
+                }
+                setTelegramJsonB64(btoa(bin));
+              }}
+              className="w-full input"
+            />
+            {telegramFilename ? (
+              <span className="text-xs text-tertiary">
+                Loaded {telegramFilename} (
+                {Math.round((telegramJsonB64.length * 3) / 4 / 1024)} KB)
+              </span>
+            ) : null}
+            <span className="text-xs text-on-surface-variant">
+              In Telegram Desktop: open the chat → ⋮ menu → Export
+              chat history → format <code>JSON</code>. Drop the
+              resulting <code>result.json</code> here. Each chat-day
+              becomes one RAG document linked back to the chat.
+            </span>
+          </label>
         ) : null}
 
         <button

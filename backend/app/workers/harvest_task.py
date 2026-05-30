@@ -37,6 +37,7 @@ from app.services.doc_harvest import (
     harvest_onedrive,
     harvest_slack_export,
     harvest_smb,
+    harvest_telegram_export,
     walk_folder,
 )
 from app.services.rag.indexer import reindex_harvested_source
@@ -168,6 +169,16 @@ async def _harvest_async(source_id: UUID) -> dict[str, int]:
                     zip_path=config.get("zip_path") or None,
                     zip_b64=config.get("zip_b64") or None,
                     only_channels=only_channels,
+                ):
+                    yield fname, data, ctx
+            elif kind == "telegram":
+                # Telegram Desktop chat export (result.json). One
+                # yield per chat-day with row_context tying chunks
+                # back to chat_id + date.
+                async for fname, data, ctx in harvest_telegram_export(
+                    json_path=config.get("json_path") or None,
+                    json_b64=config.get("json_b64") or None,
+                    group_by_day=bool(config.get("group_by_day", True)),
                 ):
                     yield fname, data, ctx
             elif kind == "imap":

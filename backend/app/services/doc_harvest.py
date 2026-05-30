@@ -1551,6 +1551,222 @@ def _group_slack_threads(
     return threads
 
 
+# ── Telegram chat export (Phase 22) ──────────────────────────────
+
+
+async def harvest_telegram_export(
+    *,
+    json_path: str | None = None,
+    json_b64: str | None = None,
+    group_by_day: bool = True,
+) -> AsyncIterator[tuple[str, bytes, dict]]:
+    """Crawl a Telegram Desktop chat export and yield each chunk of
+    conversation as one ``.txt`` "document".
+
+    Telegram Desktop's "Export chat history" → "JSON" feature
+    produces ``result.json`` with this shape::
+
+        {
+          "name": "Chat name",
+          "type": "personal_chat" | "private_supergroup" | ...,
+          "id": <int>,
+          "messages": [
+            {"id": 12345, "type": "message", "date": "2026-05-29T...",
+             "from": "Alice", "from_id": "user12345",
+             "text": "..." | [{"type":"plain","text":"..."}, ...],
+             "reply_to_message_id": ? },
+            ...
+          ]
+        }
+
+    Whole-chat export can be millions of messages → we chunk by day
+    (one yield per chat-date) when ``group_by_day=True`` (default).
+    The chunker downstream further splits each day into 1200-char
+    windows so the embedder doesn't see oversized inputs.
+
+    Yields 3-tuples ``(filename, bytes, row_context)``::
+
+        row_context = {
+          "connection_id":  "telegram:<chat_id>",
+          "table":          "telegram_chat",
+          "row_pk":         {"chat_id": "<id>", "date": "2026-05-29"},
+          "extras":         {"chat_name", "chat_type", "message_count",
+                             "first_from", "last_from"},
+          "file_column":    "chat_day",
+          "file_reference": "<chat_name> 2026-05-29",
+        }
+
+    System messages (service_message, member_joined, etc.) are
+    skipped. Message ``text`` can be either a plain string or a
+    list of formatted runs (bold / link / mention / etc.); we
+    flatten the runs to their text content.
+
+    Source supplied via ``json_path`` (server-local) or ``json_b64``
+    (upload). Use whichever fits your workflow.
+    """
+    import base64 as _base64
+    import json as _json
+    from collections import defaultdict
+    from pathlib import Path as _Path
+
+    if not json_path and not json_b64:
+        raise ValueError(
+            "telegram source requires either 'json_path' or 'json_b64'"
+        )
+
+    if json_path:
+        path = _Path(json_path)
+        if not path.is_file():
+            raise FileNotFoundError(
+                f"telegram export not found: {json_path}"
+            )
+        raw_bytes = await asyncio.to_thread(path.read_bytes)
+        source_label = path.name
+    else:
+        raw_bytes = _base64.b64decode(json_b64, validate=True)
+        source_label = "uploaded_telegram.json"
+
+    if len(raw_bytes) > 500 * 1024 * 1024:
+        raise ValueError(
+            f"telegram export size {len(raw_bytes) / (1024 ** 2):.1f} "
+            "MB exceeds 500 MB cap"
+        )
+
+    try:
+        export = _json.loads(raw_bytes.decode("utf-8"))
+    except Exception as e:
+        raise ValueError(
+            f"telegram export is not valid JSON: {e}"
+        ) from e
+
+    chat_name = str(export.get("name") or "(unnamed)")
+    chat_type = str(export.get("type") or "unknown")
+    chat_id = str(export.get("id") or "0")
+    messages = export.get("messages") or []
+    if not isinstance(messages, list):
+        return
+
+    # Group messages by date. The chunker downstream slices each
+    # day-blob into 1200-char windows, which is more retrieval-
+    # friendly than one chunk per message (typed-chat retrieval
+    # benefits from local context).
+    by_day: dict[str, list[dict]] = defaultdict(list)
+    for msg in messages:
+        if not isinstance(msg, dict):
+            continue
+        if msg.get("type") != "message":
+            # Skip service messages (joins, name changes, calls,
+            # video chats — they're retrieval noise).
+            continue
+        date_str = str(msg.get("date") or "")
+        # Date format: "2026-05-29T13:45:12". Take the date prefix.
+        date_key = date_str.split("T", 1)[0] if "T" in date_str else date_str
+        if not date_key:
+            continue
+        by_day[date_key].append(msg)
+
+    yielded = 0
+    for date_key in sorted(by_day.keys()):
+        if yielded >= MAX_DOCS_PER_HARVEST:
+            log.info(
+                "telegram export: hit %d-doc cap; stopping",
+                MAX_DOCS_PER_HARVEST,
+            )
+            return
+
+        day_msgs = by_day[date_key]
+        text, first_from, last_from = _format_telegram_day(day_msgs)
+        if not text.strip():
+            continue
+        blob = text.encode("utf-8")
+        if len(blob) > MAX_FILE_BYTES:
+            blob = blob[:MAX_FILE_BYTES]
+
+        ctx = {
+            "connection_id": f"telegram:{chat_id}",
+            "table": "telegram_chat",
+            "row_pk": {"chat_id": chat_id, "date": date_key},
+            "extras": {
+                "chat_name": chat_name,
+                "chat_type": chat_type,
+                "message_count": len(day_msgs),
+                "first_from": first_from,
+                "last_from": last_from,
+                "source_label": source_label,
+            },
+            "file_column": "chat_day",
+            "file_reference": f"{chat_name} {date_key}",
+        }
+        fname = f"telegram_{_safe_email_slug(chat_name)}_{date_key}.txt"
+        yield fname, blob, ctx
+        yielded += 1
+
+
+def _telegram_text(text: object) -> str:
+    """Flatten a Telegram ``text`` field which may be either a
+    string or a list of formatted runs ``[{type, text}, ...]``."""
+    if isinstance(text, str):
+        return text
+    if isinstance(text, list):
+        parts: list[str] = []
+        for run in text:
+            if isinstance(run, str):
+                parts.append(run)
+            elif isinstance(run, dict):
+                parts.append(str(run.get("text", "")))
+        return "".join(parts)
+    return ""
+
+
+def _format_telegram_day(msgs: list[dict]) -> tuple[str, str, str]:
+    """Render a day's worth of Telegram messages as plain text.
+
+    Returns ``(text, first_from, last_from)`` so the citation panel
+    can show which participants drove the day's conversation
+    without re-parsing the chunk.
+    """
+    if not msgs:
+        return "", "", ""
+
+    lines: list[str] = []
+    first_from = ""
+    last_from = ""
+    for i, msg in enumerate(msgs):
+        sender = str(msg.get("from") or msg.get("from_id") or "(unknown)")
+        date = str(msg.get("date") or "")
+        # Time-of-day only — date is already in the chunk key.
+        time_str = date.split("T", 1)[1][:5] if "T" in date else ""
+        body = _telegram_text(msg.get("text"))
+        reply_to = msg.get("reply_to_message_id")
+        reply_marker = f" (↳ {reply_to})" if reply_to else ""
+
+        # Media-only messages — surface the media type so retrieval
+        # can match "shared a photo" / "voice message" queries.
+        media_type = msg.get("media_type") or ""
+        if not body and media_type:
+            body = f"[{media_type}]"
+            extras = []
+            if msg.get("file_name"):
+                extras.append(str(msg["file_name"]))
+            if msg.get("duration_seconds"):
+                extras.append(f"{msg['duration_seconds']}s")
+            if extras:
+                body = f"[{media_type}: {', '.join(extras)}]"
+
+        if not body:
+            continue
+
+        if i == 0:
+            first_from = sender
+        last_from = sender
+
+        lines.append(
+            f"{sender} ({time_str}){reply_marker}:\n{body}"
+        )
+
+    return "\n\n".join(lines), first_from, last_from
+
+
 def _format_slack_thread(
     thread: list[dict], users_map: dict[str, str]
 ) -> tuple[str, str, str]:

@@ -171,7 +171,8 @@ export type DocSourceKind =
   | "gdrive"
   | "onedrive"
   | "imap"
-  | "slack";
+  | "slack"
+  | "telegram";
 export type DocSourceStatus = "idle" | "harvesting" | "ready" | "error";
 
 export type DocSource = {
