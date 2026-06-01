@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 # SQL-style dialects (sqlglot-validated, JDBC-shaped).
 SqlDialect = Literal[
     "postgres", "sqlite", "mysql", "clickhouse", "oracle", "duckdb",
-    "mssql", "snowflake",
+    "mssql", "snowflake", "bigquery",
 ]
 # Non-SQL dialects (Mongo aggregation pipelines, ES Query DSL). Their
 # engines will be plugged in via the same registry but speak different
@@ -28,6 +28,7 @@ Dialect = Literal[
     "mssql",
     "rest_api",
     "snowflake",
+    "bigquery",
 ]
 
 

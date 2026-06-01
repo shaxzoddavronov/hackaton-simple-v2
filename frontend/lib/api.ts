@@ -92,7 +92,8 @@ export type Dialect =
   | "duckdb"
   | "mssql"
   | "rest_api"
-  | "snowflake";
+  | "snowflake"
+  | "bigquery";
 
 export type AuthKind =
   | "password"

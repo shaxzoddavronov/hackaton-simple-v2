@@ -48,6 +48,7 @@ class SqlPlan(BaseModel):
         "mongodb",
         "rest_api",
         "snowflake",
+        "bigquery",
     ]
     sql: str = Field(
         description=(
@@ -84,7 +85,7 @@ class SubQuery(BaseModel):
     dialect: Literal[
         "postgres", "sqlite", "mysql", "clickhouse",
         "oracle", "elasticsearch", "duckdb", "mssql",
-        "mongodb", "rest_api", "snowflake",
+        "mongodb", "rest_api", "snowflake", "bigquery",
     ]
     query: str = Field(
         description=(

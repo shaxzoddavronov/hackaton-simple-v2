@@ -107,6 +107,12 @@ watchdog>=4.0
 # what we use.
 snowflake-connector-python>=3.6
 
+# BigQuery dialect (Phase 30 — second cloud-warehouse target).
+# google-api-python-client + google-auth are already in deps for the
+# GDrive harvester (Phase 17.4); google-cloud-bigquery layers the BQ
+# client on top.
+google-cloud-bigquery>=3.20
+
 # Scheduled-report cron evaluator (Phase 29). Celery ships croniter
 # transitively but pinning here makes ReportSchedule's "is this due?"
 # check explicit and surfaces a clear error if it gets uninstalled.

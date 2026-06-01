@@ -42,6 +42,7 @@ const DIALECTS: { value: Dialect; label: string; supported: boolean }[] = [
   { value: "mssql", label: "SQL Server", supported: true },
   { value: "rest_api", label: "REST API / CRM / 1C", supported: true },
   { value: "snowflake", label: "Snowflake", supported: true },
+  { value: "bigquery", label: "BigQuery", supported: true },
 ];
 
 const REST_PRESETS: { value: string; label: string }[] = [
@@ -1419,6 +1420,11 @@ function AddConnectionPanel({
   const [sfDatabase, setSfDatabase] = useState("");
   const [sfSchema, setSfSchema] = useState("PUBLIC");
   const [sfRole, setSfRole] = useState("");
+  // BigQuery-specific (Phase 30)
+  const [bqProject, setBqProject] = useState("");
+  const [bqDataset, setBqDataset] = useState("");
+  const [bqLocation, setBqLocation] = useState("US");
+  const [bqServiceJson, setBqServiceJson] = useState("");
   // REST API specific
   const [apiBaseUrl, setApiBaseUrl] = useState("https://");
   const [apiSpecSource, setApiSpecSource] = useState<
@@ -1590,6 +1596,28 @@ function AddConnectionPanel({
         },
         credentials: { user, password },
         auth_kind: "password" as const,
+      };
+    }
+    if (dialect === "bigquery") {
+      try {
+        JSON.parse(bqServiceJson);
+      } catch {
+        throw new Error("BigQuery service-account JSON is not valid JSON");
+      }
+      const bqCreds: Record<string, string> = {
+        service_account_json: bqServiceJson,
+      };
+      const bqMeta: Record<string, unknown> = {
+        project: bqProject,
+        dataset: bqDataset,
+        location: bqLocation || "US",
+      };
+      return {
+        name,
+        dialect,
+        connection_meta: bqMeta,
+        credentials: bqCreds,
+        auth_kind: "none" as const,
       };
     }
     if (dialect === "mongodb") {
@@ -2139,6 +2167,73 @@ function AddConnectionPanel({
                 Snowflake also supports key-pair auth — paste a PEM
                 private key in this field if your account requires it
                 (recommended for production read-only service users).
+              </span>
+            </label>
+          </>
+        ) : dialect === "bigquery" ? (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  GCP project
+                </span>
+                <input
+                  required
+                  value={bqProject}
+                  onChange={(e) => setBqProject(e.target.value)}
+                  placeholder="my-gcp-project"
+                  className="w-full input"
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  Dataset
+                </span>
+                <input
+                  required
+                  value={bqDataset}
+                  onChange={(e) => setBqDataset(e.target.value)}
+                  placeholder="analytics"
+                  className="w-full input"
+                />
+              </label>
+            </div>
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                Location
+              </span>
+              <input
+                value={bqLocation}
+                onChange={(e) => setBqLocation(e.target.value)}
+                placeholder="US"
+                className="w-full input"
+              />
+              <span className="text-xs text-on-surface-variant">
+                Common: <code>US</code>, <code>EU</code>,{" "}
+                <code>asia-northeast1</code>. Must match the dataset&apos;s
+                actual region.
+              </span>
+            </label>
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                Service-account JSON
+              </span>
+              <textarea
+                required
+                value={bqServiceJson}
+                onChange={(e) => setBqServiceJson(e.target.value)}
+                placeholder={
+                  '{"type":"service_account","project_id":"...","private_key":"...",...}'
+                }
+                rows={6}
+                className="w-full input font-mono text-xs"
+              />
+              <span className="text-xs text-on-surface-variant">
+                Google Cloud Console → IAM → Service Accounts → Keys →
+                Add Key. Roles needed:{" "}
+                <code>roles/bigquery.dataViewer</code> +{" "}
+                <code>roles/bigquery.jobUser</code>. Stored encrypted
+                at rest.
               </span>
             </label>
           </>
