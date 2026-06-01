@@ -43,6 +43,7 @@ const DIALECTS: { value: Dialect; label: string; supported: boolean }[] = [
   { value: "rest_api", label: "REST API / CRM / 1C", supported: true },
   { value: "snowflake", label: "Snowflake", supported: true },
   { value: "bigquery", label: "BigQuery", supported: true },
+  { value: "graphql", label: "GraphQL API", supported: true },
 ];
 
 const REST_PRESETS: { value: string; label: string }[] = [
@@ -1425,6 +1426,20 @@ function AddConnectionPanel({
   const [bqDataset, setBqDataset] = useState("");
   const [bqLocation, setBqLocation] = useState("US");
   const [bqServiceJson, setBqServiceJson] = useState("");
+  // GraphQL-specific (Phase 32)
+  const [gqlEndpoint, setGqlEndpoint] = useState("https://");
+  const [gqlAuthKind, setGqlAuthKind] = useState<
+    "bearer" | "api_key" | "basic" | "none"
+  >("bearer");
+  const [gqlToken, setGqlToken] = useState("");
+  const [gqlApiKey, setGqlApiKey] = useState("");
+  const [gqlApiKeyLocation, setGqlApiKeyLocation] = useState<
+    "header" | "query"
+  >("header");
+  const [gqlApiKeyName, setGqlApiKeyName] = useState("X-API-Key");
+  const [gqlUsername, setGqlUsername] = useState("");
+  const [gqlPassword, setGqlPassword] = useState("");
+  const [gqlTimeoutS, setGqlTimeoutS] = useState("30");
   // REST API specific
   const [apiBaseUrl, setApiBaseUrl] = useState("https://");
   const [apiSpecSource, setApiSpecSource] = useState<
@@ -1675,6 +1690,30 @@ function AddConnectionPanel({
         connection_meta: meta,
         credentials,
         auth_kind: apiAuthKind,
+      } as const;
+    }
+    if (dialect === "graphql") {
+      const meta: Record<string, unknown> = {
+        endpoint: gqlEndpoint.replace(/\/$/, ""),
+        timeout_s: Number(gqlTimeoutS) || 30,
+      };
+      const credentials: Record<string, string> = {};
+      if (gqlAuthKind === "bearer") {
+        credentials.token = gqlToken;
+      } else if (gqlAuthKind === "api_key") {
+        credentials.key = gqlApiKey;
+        credentials.key_location = gqlApiKeyLocation;
+        credentials.key_name = gqlApiKeyName;
+      } else if (gqlAuthKind === "basic") {
+        credentials.username = gqlUsername;
+        credentials.password = gqlPassword;
+      }
+      return {
+        name,
+        dialect,
+        connection_meta: meta,
+        credentials,
+        auth_kind: gqlAuthKind,
       } as const;
     }
     // Fallback — should not be reachable now that every dialect is supported.
@@ -2236,6 +2275,160 @@ function AddConnectionPanel({
                 at rest.
               </span>
             </label>
+          </>
+        ) : dialect === "graphql" ? (
+          <>
+            <label className="block space-y-1">
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                GraphQL endpoint
+              </span>
+              <input
+                required
+                value={gqlEndpoint}
+                onChange={(e) => setGqlEndpoint(e.target.value)}
+                placeholder="https://api.github.com/graphql"
+                className="w-full input"
+              />
+              <span className="text-xs text-on-surface-variant">
+                Single endpoint URL — every query / introspection
+                call POSTs here.
+              </span>
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  Auth kind
+                </span>
+                <select
+                  value={gqlAuthKind}
+                  onChange={(e) =>
+                    setGqlAuthKind(
+                      e.target.value as
+                        | "bearer"
+                        | "api_key"
+                        | "basic"
+                        | "none",
+                    )
+                  }
+                  className="w-full input"
+                >
+                  <option value="bearer">Bearer token</option>
+                  <option value="api_key">API key</option>
+                  <option value="basic">Basic (user/pass)</option>
+                  <option value="none">No auth</option>
+                </select>
+              </label>
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  Timeout (s)
+                </span>
+                <input
+                  type="number"
+                  value={gqlTimeoutS}
+                  onChange={(e) => setGqlTimeoutS(e.target.value)}
+                  className="w-full input"
+                />
+              </label>
+            </div>
+            {gqlAuthKind === "bearer" ? (
+              <label className="block space-y-1">
+                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  Bearer token
+                </span>
+                <input
+                  required
+                  type="password"
+                  value={gqlToken}
+                  onChange={(e) => setGqlToken(e.target.value)}
+                  placeholder="ghp_..."
+                  className="w-full input"
+                />
+                <span className="text-xs text-on-surface-variant">
+                  Sent as <code>Authorization: Bearer …</code>. For
+                  GitHub use a fine-grained PAT with read-only
+                  scopes; Shopify uses an Admin API access token.
+                </span>
+              </label>
+            ) : gqlAuthKind === "api_key" ? (
+              <>
+                <label className="block space-y-1">
+                  <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                    API key
+                  </span>
+                  <input
+                    required
+                    type="password"
+                    value={gqlApiKey}
+                    onChange={(e) => setGqlApiKey(e.target.value)}
+                    className="w-full input"
+                  />
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block space-y-1">
+                    <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                      Location
+                    </span>
+                    <select
+                      value={gqlApiKeyLocation}
+                      onChange={(e) =>
+                        setGqlApiKeyLocation(
+                          e.target.value as "header" | "query",
+                        )
+                      }
+                      className="w-full input"
+                    >
+                      <option value="header">Header</option>
+                      <option value="query">Query param</option>
+                    </select>
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                      Key name
+                    </span>
+                    <input
+                      required
+                      value={gqlApiKeyName}
+                      onChange={(e) => setGqlApiKeyName(e.target.value)}
+                      placeholder="X-API-Key"
+                      className="w-full input"
+                    />
+                  </label>
+                </div>
+              </>
+            ) : gqlAuthKind === "basic" ? (
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block space-y-1">
+                  <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                    Username
+                  </span>
+                  <input
+                    required
+                    value={gqlUsername}
+                    onChange={(e) => setGqlUsername(e.target.value)}
+                    className="w-full input"
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                    Password
+                  </span>
+                  <input
+                    required
+                    type="password"
+                    value={gqlPassword}
+                    onChange={(e) => setGqlPassword(e.target.value)}
+                    className="w-full input"
+                  />
+                </label>
+              </div>
+            ) : null}
+            <p className="text-xs text-on-surface-variant">
+              Connection uses GraphQL introspection (<code>__schema</code>)
+              to discover root <em>Query</em> fields — these become
+              callable &quot;tables&quot; in the planner. Mutations
+              and subscriptions are blocked by the validator before
+              any request leaves the agent.
+            </p>
           </>
         ) : dialect === "mongodb" ? (
           <>

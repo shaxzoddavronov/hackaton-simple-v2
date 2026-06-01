@@ -48,7 +48,7 @@ _CONNECTION_TEST_TIMEOUT_S = 8.0
 _DIALECTS = Literal[
     "postgres", "sqlite", "mysql", "clickhouse", "oracle",
     "mongodb", "elasticsearch", "duckdb", "mssql", "rest_api",
-    "snowflake", "bigquery",
+    "snowflake", "bigquery", "graphql",
 ]
 
 # auth_kind covers DB engines (password/dsn/iam/none) AND the REST API

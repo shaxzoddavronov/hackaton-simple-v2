@@ -31,6 +31,7 @@ def register_all() -> None:
     from app.engines import rest_api as _rest_api  # noqa: F401
     from app.engines import snowflake as _snowflake  # noqa: F401
     from app.engines import bigquery as _bigquery  # noqa: F401
+    from app.engines import graphql as _graphql  # noqa: F401
 
 
 __all__ = ["DIALECT_REGISTRY", "get_engine", "register_all"]

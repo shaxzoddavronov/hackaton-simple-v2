@@ -93,7 +93,8 @@ export type Dialect =
   | "mssql"
   | "rest_api"
   | "snowflake"
-  | "bigquery";
+  | "bigquery"
+  | "graphql";
 
 export type AuthKind =
   | "password"

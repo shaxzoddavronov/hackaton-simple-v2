@@ -49,6 +49,7 @@ class SqlPlan(BaseModel):
         "rest_api",
         "snowflake",
         "bigquery",
+        "graphql",
     ]
     sql: str = Field(
         description=(
@@ -58,7 +59,9 @@ class SqlPlan(BaseModel):
             "For mongodb: a JSON envelope "
             '{"database":"...","collection":"...","pipeline":[...]}. '
             "For rest_api: a JSON envelope "
-            '{"endpoint":"/path","method":"GET","query_params":{...},...}.'
+            '{"endpoint":"/path","method":"GET","query_params":{...},...}. '
+            "For graphql: a JSON envelope "
+            '{"query":"query { ... }","variables":{...}}.'
         )
     )
     rationale: str = Field(
@@ -86,6 +89,7 @@ class SubQuery(BaseModel):
         "postgres", "sqlite", "mysql", "clickhouse",
         "oracle", "elasticsearch", "duckdb", "mssql",
         "mongodb", "rest_api", "snowflake", "bigquery",
+        "graphql",
     ]
     query: str = Field(
         description=(
@@ -95,7 +99,9 @@ class SubQuery(BaseModel):
             "For mongodb: a JSON envelope "
             '{"database":"...","collection":"...","pipeline":[...]}. '
             "For rest_api: a JSON envelope "
-            '{"endpoint":"/path","method":"GET","query_params":{...},...}.'
+            '{"endpoint":"/path","method":"GET","query_params":{...},...}. '
+            "For graphql: a JSON envelope "
+            '{"query":"query { ... }","variables":{...}}.'
         )
     )
     alias: str = Field(

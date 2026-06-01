@@ -15,7 +15,9 @@ SqlDialect = Literal[
 NoSqlDialect = Literal["mongodb", "elasticsearch"]
 # REST-style data sources (CRM / ERP / 1C / OpenAPI). Speak a JSON
 # envelope and are validated by services.api_query_validator.
-ApiDialect = Literal["rest_api"]
+# Phase 32 — GraphQL endpoints share the REST shape (single endpoint +
+# auth) but their own AST-based validator (graphql-core).
+ApiDialect = Literal["rest_api", "graphql"]
 Dialect = Literal[
     "postgres",
     "sqlite",
@@ -29,6 +31,7 @@ Dialect = Literal[
     "rest_api",
     "snowflake",
     "bigquery",
+    "graphql",
 ]
 
 

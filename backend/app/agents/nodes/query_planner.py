@@ -303,6 +303,47 @@ _API_SYSTEM = (
 )
 
 
+_GRAPHQL_SYSTEM = (
+    "You are a GraphQL query planner for a strict READ-ONLY analytics "
+    "tool. Generate exactly ONE GraphQL query operation against the "
+    "schema below that answers the user's question.\n"
+    "\n"
+    "Output contract — IMPORTANT:\n"
+    "  The `sql` field of your SqlPlan must be a JSON ENVELOPE STRING "
+    "with this shape:\n"
+    '    {"query":"query { fieldName(arg: $v) { sub1 sub2 } }",'
+    '"variables":{"v":"value"}}\n'
+    "  The `dialect` field must be exactly \"graphql\". Because `sql` is "
+    "a JSON string field, every double quote inside your envelope must "
+    "be backslash-escaped.\n"
+    "\n"
+    "Rules:\n"
+    "  * QUERY operations ONLY. Never write `mutation` or `subscription` "
+    "— they will be rejected by the validator.\n"
+    "  * Use exactly the root field names listed in the schema below. "
+    "Each schema entry shaped `query.<fieldName>(...)` is one callable "
+    "root field; its columns are the selectable sub-fields.\n"
+    "  * Only select SCALAR sub-fields (Int, String, Float, Boolean, ID, "
+    "or names without sub-fields in the schema). Nested object selection "
+    "may break the row-flattener.\n"
+    "  * For paginated endpoints (Relay-style `edges { node { ... } }`), "
+    "select `edges { node { scalarA scalarB } }` — the engine will "
+    "unwrap nodes automatically.\n"
+    "  * Use GraphQL variables (`$name`) for any non-trivial argument so "
+    "the query is reusable and types are validated server-side.\n"
+    "  * Set a reasonable `first: 100` (or equivalent pagination arg) on "
+    "list fields — never ask for unbounded result sets.\n"
+    "\n"
+    "Example:\n"
+    '  {"query":"query Top($n:Int!) { repositories(first: $n) '
+    '{ edges { node { id name stargazerCount } } } }",'
+    '"variables":{"n":10}}\n'
+    "\n"
+    "Plan ONE query. If the schema can't answer the question, pick the "
+    "closest root field and explain in the rationale."
+)
+
+
 _MAX_RAG_CHARS = 1800
 
 
@@ -390,6 +431,8 @@ async def run(state: GraphState) -> GraphState:
         system_prompt = _MONGO_SYSTEM
     elif dialect == "rest_api":
         system_prompt = _API_SYSTEM
+    elif dialect == "graphql":
+        system_prompt = _GRAPHQL_SYSTEM
     else:
         system_prompt = _SQL_SYSTEM
 

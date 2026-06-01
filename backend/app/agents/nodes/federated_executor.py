@@ -44,6 +44,7 @@ from app.engines.registry import get_engine
 from app.services import crypto
 from app.services.api_query_validator import validate_api_query
 from app.services.es_readonly_validator import validate_es_query
+from app.services.graphql_readonly_validator import validate_graphql_query
 from app.services.mongo_readonly_validator import validate_mongo_query
 from app.services.federation_merge import MergeError, execute_merge_pipeline
 from app.services.readonly_validator import validate_readonly
@@ -100,6 +101,8 @@ async def _run_one(
         result, _ = validate_mongo_query(query)
     elif dialect == "rest_api":
         result, _ = validate_api_query(query)
+    elif dialect == "graphql":
+        result, _ = validate_graphql_query(query)
     else:
         result = validate_readonly(query, dialect=dialect)
     if not result.ok:

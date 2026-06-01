@@ -118,6 +118,12 @@ google-cloud-bigquery>=3.20
 # check explicit and surfaces a clear error if it gets uninstalled.
 croniter>=1.4
 
+# GraphQL dialect (Phase 32). graphql-core is the reference Python
+# implementation of the GraphQL spec — used here only for AST parsing
+# and operation-type checking inside the read-only validator. Wire
+# transport stays plain httpx; we never call graphql-core to execute.
+graphql-core>=3.2
+
 # Agent orchestration
 langgraph
 langchain-core
