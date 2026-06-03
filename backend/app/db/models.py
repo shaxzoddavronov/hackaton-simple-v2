@@ -877,6 +877,14 @@ class ReportSchedule(Base):
     recipients: Mapped[str] = mapped_column(
         String(2048), nullable=False, server_default=text("''")
     )
+    # Phase 33 — fan-out to Slack / Teams / Discord / Mattermost / custom
+    # incoming-webhook endpoints in addition to email. Newline-separated
+    # list of full URLs. Each URL receives the same report payload as
+    # the email body, formatted as the destination's preferred shape
+    # (Slack attachments, MS Teams cards, plain JSON).
+    webhook_urls: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("''")
+    )
     enabled: Mapped[bool] = mapped_column(
         nullable=False, server_default=text("true")
     )

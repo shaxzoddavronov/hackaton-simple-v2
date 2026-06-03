@@ -202,13 +202,57 @@ async def _fire_one(session, sched, now: datetime) -> None:
         extra = extra.strip()
         if extra and "@" in extra and extra not in to_addrs:
             to_addrs.append(extra)
-    if not to_addrs:
+
+    # Phase 33 — webhook fan-out. A schedule with zero email
+    # recipients is now valid as long as at least one webhook URL is
+    # configured (Slack-only digests are a common request).
+    from app.services.report_webhooks import (
+        fan_out_webhooks,
+        parse_webhook_urls,
+    )
+
+    webhook_urls = parse_webhook_urls(
+        getattr(sched, "webhook_urls", "") or ""
+    )
+
+    if not to_addrs and not webhook_urls:
         raise RuntimeError(
-            "no recipients — owner has no email and recipients is empty"
+            "no destinations — owner has no email, recipients is empty, "
+            "and no webhook_urls are configured"
         )
 
     subject = f"[QueryMind] {dash.name} — daily digest"
-    send_email(to_addrs=to_addrs, subject=subject, html_body=html)
+    if to_addrs:
+        send_email(to_addrs=to_addrs, subject=subject, html_body=html)
+
+    if webhook_urls:
+        outcomes = fan_out_webhooks(
+            urls=webhook_urls,
+            dashboard_name=dash.name,
+            workspace_name=ws.name if ws is not None else "(unknown)",
+            dashboard_url=dash_url,
+            cards=cards,
+            generated_at_iso=now.replace(microsecond=0).isoformat(),
+        )
+        bad = [o for o in outcomes if not o.ok]
+        if bad:
+            # Surface webhook failures via last_error but DON'T raise
+            # — email may have succeeded and we want last_status='ok'
+            # for the parts that worked. The caller logs+stamps
+            # last_error from the RuntimeError we raise here ONLY if
+            # EVERY destination failed.
+            if not to_addrs and len(bad) == len(outcomes):
+                detail = "; ".join(
+                    f"{o.url}: {o.error}" for o in bad[:3]
+                )
+                raise RuntimeError(
+                    f"all webhook deliveries failed: {detail}"
+                )
+            # Partial failure — log but treat the firing as a success.
+            log.warning(
+                "report_task: %d/%d webhooks failed for schedule %s",
+                len(bad), len(outcomes), sched.id,
+            )
 
 
 async def _run_one_question(q) -> dict:
