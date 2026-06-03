@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { CodeBlock } from "@/components/CodeBlock";
+import { ConnectionStatusDot } from "@/components/ConnectionStatusDot";
 import { GlassPanel } from "@/components/GlassPanel";
 import { useToast } from "@/components/Toast";
 import {
@@ -217,8 +218,16 @@ export default function WorkspaceDetailPage() {
             <GlassPanel key={c.id} className="px-5 py-4">
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <div className="font-headline text-on-surface text-lg">
+                  <div className="font-headline text-on-surface text-lg flex items-center gap-2">
                     {c.name}
+                    <ConnectionStatusDot
+                      workspaceId={workspaceId}
+                      connectionId={c.id}
+                      initialOk={c.last_health_ok}
+                      initialLatencyMs={c.last_health_latency_ms}
+                      initialError={c.last_health_error}
+                      initialCheckedAt={c.last_health_check_at}
+                    />
                   </div>
                   <div className="text-on-surface-variant text-sm uppercase tracking-wider">
                     {c.dialect}

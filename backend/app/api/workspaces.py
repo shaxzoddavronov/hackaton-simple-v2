@@ -95,6 +95,23 @@ class ConnectionOut(BaseModel):
     dialect: str
     status: str
     profile_job_id: str | None = None
+    # Phase 35 — latest health-probe outcome. NULL = never probed.
+    last_health_check_at: str | None = None
+    last_health_ok: bool | None = None
+    last_health_latency_ms: int | None = None
+    last_health_error: str | None = None
+
+
+class ConnectionHealthOut(BaseModel):
+    """Dedicated payload for the on-demand health endpoint. Mirrors
+    the four health columns plus the connection identity so the UI
+    can render a refresh button next to the status dot."""
+    connection_id: str
+    dialect: str
+    last_health_check_at: str | None = None
+    last_health_ok: bool | None = None
+    last_health_latency_ms: int | None = None
+    last_health_error: str | None = None
 
 
 class TestConnectionRequest(BaseModel):
@@ -222,8 +239,6 @@ async def create_workspace(
     ws = Workspace(
         owner_id=current_user.id,
         name=payload.name,
-        dialect=None,
-        connection_meta=None,
         status="pending",
     )
     session.add(ws)
@@ -330,16 +345,32 @@ async def list_connections(
         .where(WorkspaceConnection.workspace_id == workspace_id)
         .order_by(WorkspaceConnection.created_at.desc())
     )
-    return [
-        ConnectionOut(
-            id=str(c.id),
-            workspace_id=str(c.workspace_id),
-            name=c.name,
-            dialect=c.dialect,
-            status=c.status,
-        )
-        for c in rows.scalars().all()
-    ]
+    return [_connection_out(c) for c in rows.scalars().all()]
+
+
+def _connection_out(
+    c: WorkspaceConnection,
+    *,
+    profile_job_id: str | None = None,
+) -> ConnectionOut:
+    """Single source of truth for the ConnectionOut shape so health
+    fields are never forgotten on a new endpoint."""
+    return ConnectionOut(
+        id=str(c.id),
+        workspace_id=str(c.workspace_id),
+        name=c.name,
+        dialect=c.dialect,
+        status=c.status,
+        profile_job_id=profile_job_id,
+        last_health_check_at=(
+            c.last_health_check_at.isoformat()
+            if c.last_health_check_at
+            else None
+        ),
+        last_health_ok=c.last_health_ok,
+        last_health_latency_ms=c.last_health_latency_ms,
+        last_health_error=c.last_health_error,
+    )
 
 
 @router.post(
@@ -407,14 +438,7 @@ async def create_connection(
 
     _enqueue_profile_job(str(conn.id), str(job.id))
 
-    return ConnectionOut(
-        id=str(conn.id),
-        workspace_id=str(conn.workspace_id),
-        name=conn.name,
-        dialect=conn.dialect,
-        status=conn.status,
-        profile_job_id=str(job.id),
-    )
+    return _connection_out(conn, profile_job_id=str(job.id))
 
 
 @router.get(
@@ -430,13 +454,7 @@ async def get_connection(
     conn = await _get_owned_connection(
         session, workspace_id, connection_id, current_user
     )
-    return ConnectionOut(
-        id=str(conn.id),
-        workspace_id=str(conn.workspace_id),
-        name=conn.name,
-        dialect=conn.dialect,
-        status=conn.status,
-    )
+    return _connection_out(conn)
 
 
 @router.delete(
@@ -494,11 +512,60 @@ async def refresh_connection(
         await _qc_inv(str(connection_id))
     except Exception:  # pragma: no cover — best-effort
         pass
-    return ConnectionOut(
-        id=str(conn.id),
-        workspace_id=str(conn.workspace_id),
-        name=conn.name,
+    return _connection_out(conn, profile_job_id=str(job.id))
+
+
+@router.get(
+    "/{workspace_id}/connections/{connection_id}/health",
+    response_model=ConnectionHealthOut,
+)
+async def get_connection_health(
+    workspace_id: UUID,
+    connection_id: UUID,
+    refresh: bool = False,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ConnectionHealthOut:
+    """Return the last-known health for one connection.
+
+    Set ``refresh=true`` to force a synchronous probe instead of
+    reading the cached result. The synchronous path is what the
+    UI's "↻ recheck" button hits; the cached path is the cheap
+    default used on page load.
+    """
+    conn = await _get_owned_connection(
+        session, workspace_id, connection_id, current_user
+    )
+    if refresh:
+        from datetime import datetime, timezone
+
+        from app.services.connection_health import probe_one
+        from app.workers.health_task import _load_credentials
+
+        creds = await _load_credentials(session, conn.id)
+        if creds is None:
+            conn.last_health_check_at = datetime.now(timezone.utc)
+            conn.last_health_ok = False
+            conn.last_health_latency_ms = 0
+            conn.last_health_error = "credentials unavailable"
+        else:
+            result = await probe_one(conn, creds)
+            conn.last_health_check_at = datetime.now(timezone.utc)
+            conn.last_health_ok = result.ok
+            conn.last_health_latency_ms = result.latency_ms
+            conn.last_health_error = result.error
+        await session.commit()
+        await session.refresh(conn)
+
+    return ConnectionHealthOut(
+        connection_id=str(conn.id),
         dialect=conn.dialect,
-        status=conn.status,
-        profile_job_id=str(job.id),
+        last_health_check_at=(
+            conn.last_health_check_at.isoformat()
+            if conn.last_health_check_at
+            else None
+        ),
+        last_health_ok=conn.last_health_ok,
+        last_health_latency_ms=conn.last_health_latency_ms,
+        last_health_error=conn.last_health_error,
     )

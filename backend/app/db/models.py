@@ -314,6 +314,19 @@ class WorkspaceConnection(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
+    # Phase 35 — periodic Celery-beat probe writes here so the UI can
+    # render a status dot without re-running the probe on each page
+    # load. All NULL on rows that have never been polled.
+    last_health_check_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_health_ok: Mapped[bool | None] = mapped_column(nullable=True)
+    last_health_latency_ms: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    last_health_error: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )
 
     workspace: Mapped[Workspace] = relationship(back_populates="connections")
     credentials: Mapped["WorkspaceCredentials | None"] = relationship(

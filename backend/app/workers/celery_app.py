@@ -15,6 +15,7 @@ celery_app = Celery(
         "app.workers.diff_task",
         "app.workers.harvest_task",
         "app.workers.report_task",
+        "app.workers.health_task",
     ],
 )
 
@@ -71,5 +72,14 @@ celery_app.conf.beat_schedule = {
     "reports-due-sweep": {
         "task": "app.workers.report_task.run_due_report_schedules",
         "schedule": crontab(minute="*"),
+    },
+    # Phase 35 — every 5 minutes, probe every workspace_connection
+    # with a cheap dialect-appropriate liveness check and stamp the
+    # outcome onto the row (last_health_check_at / ok / latency_ms /
+    # error). The UI reads these without re-doing the probe on every
+    # page load.
+    "connection-health-sweep": {
+        "task": "app.workers.health_task.run_health_sweep",
+        "schedule": crontab(minute="*/5"),
     },
 }

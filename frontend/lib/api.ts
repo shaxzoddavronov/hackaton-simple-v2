@@ -127,7 +127,32 @@ export type ConnectionSummary = {
   dialect: Dialect;
   status: string;
   profile_job_id?: string | null;
+  // Phase 35 — last health-probe outcome. NULL = never probed.
+  last_health_check_at?: string | null;
+  last_health_ok?: boolean | null;
+  last_health_latency_ms?: number | null;
+  last_health_error?: string | null;
 };
+
+export type ConnectionHealth = {
+  connection_id: string;
+  dialect: Dialect;
+  last_health_check_at: string | null;
+  last_health_ok: boolean | null;
+  last_health_latency_ms: number | null;
+  last_health_error: string | null;
+};
+
+export async function getConnectionHealth(
+  workspace_id: string,
+  connection_id: string,
+  refresh = false,
+): Promise<ConnectionHealth> {
+  const qs = refresh ? "?refresh=true" : "";
+  return api<ConnectionHealth>(
+    `/workspaces/${workspace_id}/connections/${connection_id}/health${qs}`,
+  );
+}
 
 export async function listConnections(
   workspace_id: string,
