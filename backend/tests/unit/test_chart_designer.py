@@ -158,9 +158,15 @@ def test_single_row_with_dict_label_stringifies() -> None:
     assert "EMEA" in spec.label
 
 
-def test_leaderboard_with_extras_picks_table() -> None:
-    # When planner returns multiple numeric columns alongside the name,
-    # bar isn't a good fit — fall back to table so all metrics show.
+def test_leaderboard_with_multiple_numerics_picks_grouped_bar() -> None:
+    # When the planner returns multiple numeric columns alongside one
+    # categorical anchor, render a GROUPED bar with every numeric as
+    # its own series. The pre-Phase-34 rule mis-fell-through to
+    # `table` here, which is what real users complained about
+    # ("analitik grafik qilib korsatmadingku" — you didn't make a
+    # chart!). All numerics travel together on y; incidental time
+    # columns get filtered out of the y series but don't disqualify
+    # the bar shape.
     spec = _pick_spec(
         _rs(
             ["display_name", "sessions_count", "correct_total", "last_activity"],
@@ -170,6 +176,65 @@ def test_leaderboard_with_extras_picks_table() -> None:
                 ["Bobur S.", 9, 65, "2026-05-25"],
             ],
         ),
-        "Eng faol foydalanuvchilar",
+        "eng faol foydalanuvchilarni grafik qilib korsat",
     )
-    assert spec.type == "table"
+    assert spec.type == "bar"
+    assert spec.x == "display_name"
+    # Both numerics show as separate series; timestamp excluded.
+    assert spec.y == ["sessions_count", "correct_total"]
+    assert "last_activity" not in spec.y
+    assert len(spec.data) == 2
+
+
+def test_two_numerics_plus_category_picks_grouped_bar() -> None:
+    """The exact shape the user hit when asking for a registration
+    chart: one categorical anchor + two numeric metrics + no time
+    column. Old rule required ``nums == 1``, fell through to table."""
+    spec = _pick_spec(
+        _rs(
+            ["display_name", "session_count", "attempt_count"],
+            ["text", "bigint", "bigint"],
+            [
+                ["S.", 8, 0],
+                ["Mashkura", 1, 1],
+                ["Saodat", 1, 0],
+            ],
+        ),
+        "foydalanuvchilarni royxatdan otishini grafik qilib korsat",
+    )
+    assert spec.type == "bar"
+    assert spec.x == "display_name"
+    assert spec.y == ["session_count", "attempt_count"]
+
+
+def test_category_with_only_timestamp_still_picks_bar() -> None:
+    """Edge case: category + numeric + timestamp. The category wins
+    the X-axis; the timestamp gets dropped from y. Earlier rule
+    refused bar whenever a time column was present."""
+    spec = _pick_spec(
+        _rs(
+            ["region", "revenue", "last_sale"],
+            ["text", "numeric", "timestamp"],
+            [["EMEA", 100, "2026-05-30"], ["APAC", 80, "2026-05-31"]],
+        ),
+        "revenue by region",
+    )
+    assert spec.type == "bar"
+    assert spec.x == "region"
+    assert spec.y == ["revenue"]
+
+
+def test_pie_only_when_single_metric_and_distribution_keyword() -> None:
+    """Pie used to fire whenever the share/distribution keyword
+    matched even if there were two numerics. Now strict: single
+    numeric + small N + keyword."""
+    # Two numerics with the distribution keyword → bar, NOT pie.
+    spec = _pick_spec(
+        _rs(
+            ["region", "revenue", "orders"],
+            ["text", "numeric", "bigint"],
+            [["EMEA", 100, 5], ["APAC", 80, 3]],
+        ),
+        "show distribution by region",
+    )
+    assert spec.type == "bar"

@@ -169,8 +169,57 @@ def _pick_spec(rs: ResultSet, user_message: str) -> UISpec:
         # Single row, all non-numeric — show as a tiny table.
         return _table_spec(rs)
 
+    # ── 1 category + ≥1 numeric → bar (or pie for small N) ───────────
+    # Bar wins over line when a categorical anchor exists — analytics
+    # questions like "top users by sessions" should plot users on the
+    # X-axis even if a last_activity timestamp tags along. Incidental
+    # time columns (max(created_at), etc.) are excluded from the y
+    # series, not the X-axis decision.
+    if len(others) == 1 and len(nums) >= 1:
+        x = rs.columns[others[0]]
+        ys = [rs.columns[i] for i in nums]
+        rows = _rows_as_dicts(rs)
+        # Pie only when the result reads naturally as a part-of-whole
+        # share AND there's a single numeric to apportion: 2–8 rows,
+        # mention-of "share/percent/distribution".
+        if (
+            len(ys) == 1
+            and 2 <= rs.row_count <= 8
+            and re.search(
+                r"share|percent|distribution|ulush|tarqalish",
+                user_message or "",
+                re.I,
+            )
+        ):
+            return PieSpec(
+                type="pie",
+                title=_pretty_label(ys[0]),
+                label=x,
+                value=ys[0],
+                data=rows,
+            )
+        # Stacked when the user asks for a comparison shape and we
+        # have multiple series. Otherwise grouped.
+        stacked = bool(
+            len(ys) > 1
+            and re.search(
+                r"stacked|cumulative|kumulyativ|jami", user_message or "", re.I
+            )
+        )
+        return BarSpec(
+            type="bar",
+            title=_pretty_label(ys[0]) + " by " + _pretty_label(x),
+            x=x,
+            y=ys,
+            data=rows,
+            stacked=stacked,
+        )
+
     # ── Time series → line ────────────────────────────────────────────
-    if times and nums and len(nums) >= 1 and len(others) == 0:
+    # Only when there's NO categorical anchor — otherwise the bar
+    # branch above handles it. A pure time-series shape is
+    # ``len(times) >= 1 and len(others) == 0``.
+    if times and nums and len(others) == 0:
         x = rs.columns[times[0]]
         ys = [rs.columns[i] for i in nums]
         return LineSpec(
@@ -179,33 +228,6 @@ def _pick_spec(rs: ResultSet, user_message: str) -> UISpec:
             x=x,
             y=ys,
             data=_rows_as_dicts(rs),
-        )
-
-    # ── 1 category + 1 numeric → bar (or pie for small N) ─────────────
-    if len(others) == 1 and len(nums) == 1 and not times:
-        x = rs.columns[others[0]]
-        y = rs.columns[nums[0]]
-        rows = _rows_as_dicts(rs)
-        # Pie only when the result reads naturally as a part-of-whole
-        # share: 2–8 rows, mention-of "share/percent/distribution".
-        if 2 <= rs.row_count <= 8 and re.search(
-            r"share|percent|distribution|ulush|tarqalish",
-            user_message or "",
-            re.I,
-        ):
-            return PieSpec(
-                type="pie",
-                title=_pretty_label(y),
-                label=x,
-                value=y,
-                data=rows,
-            )
-        return BarSpec(
-            type="bar",
-            title=_pretty_label(y) + " by " + _pretty_label(x),
-            x=x,
-            y=[y],
-            data=rows,
         )
 
     # ── Many columns or unusual shape → table ─────────────────────────
