@@ -526,6 +526,18 @@ class QueryHistory(Base):
     row_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Phase 34 — cache the result rows so the export endpoints don't
+    # have to re-run the query. Bounded: the executor only persists
+    # when row_count <= RESULT_EXPORT_MAX_ROWS (default 10_000) AND
+    # the serialised payload fits inside RESULT_EXPORT_MAX_BYTES
+    # (default 8 MiB). For oversize results result_rows stays NULL
+    # and the export endpoint returns 413 Payload Too Large.
+    result_columns: Mapped[list[str] | None] = mapped_column(
+        JSONType, nullable=True
+    )
+    result_rows: Mapped[list[list] | None] = mapped_column(
+        JSONType, nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

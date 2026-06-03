@@ -1,9 +1,15 @@
 "use client";
 
+import { useState } from "react";
+
 import { CodeBlock } from "@/components/CodeBlock";
 import { RenderSpec } from "@/components/RenderSpec";
 import { useToast } from "@/components/Toast";
-import { createSavedQuestion } from "@/lib/api";
+import {
+  createSavedQuestion,
+  downloadMessageExport,
+  type ExportFormat,
+} from "@/lib/api";
 import { cn } from "@/lib/cn";
 import type { ChatMessage } from "@/lib/types";
 
@@ -45,7 +51,12 @@ export function MessageBubble({
         <div className="text-on-surface-variant italic">No response.</div>
       )}
       {message.sql ? (
-        <CodeBlock language="sql" code={message.sql} collapsible />
+        <div className="flex items-start gap-2">
+          <div className="flex-1 min-w-0">
+            <CodeBlock language="sql" code={message.sql} collapsible />
+          </div>
+          <ExportMenu messageId={message.id} />
+        </div>
       ) : null}
       {message.citations && message.citations.length ? (
         <CitationsList citations={message.citations} />
@@ -201,6 +212,80 @@ function FederationBadge({
           </span>
         </span>
       ))}
+    </div>
+  );
+}
+
+
+/**
+ * Phase 34 — download menu next to the SQL block. Three formats:
+ * CSV (Excel-friendly UTF-8 BOM), XLSX (styled, autofit columns),
+ * JSON (one object per row).
+ *
+ * Cache miss (oversize result, pre-Phase-34 message) surfaces as a
+ * toast — the backend returns 410 with a re-run hint.
+ */
+function ExportMenu({ messageId }: { messageId: string }) {
+  const [busy, setBusy] = useState<ExportFormat | null>(null);
+  const [open, setOpen] = useState(false);
+  const toast = useToast();
+
+  async function download(fmt: ExportFormat) {
+    setBusy(fmt);
+    setOpen(false);
+    try {
+      await downloadMessageExport(messageId, fmt);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Download failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        disabled={busy !== null}
+        className={cn(
+          "px-2.5 py-1 rounded-md text-xs",
+          "bg-surface-variant/40 hover:bg-surface-variant/70",
+          "text-on-surface border border-outline/30",
+          "transition disabled:opacity-50",
+        )}
+        title="Download result rows"
+      >
+        {busy ? `…${busy}` : "↓ Export"}
+      </button>
+      {open ? (
+        <div
+          className={cn(
+            "absolute right-0 mt-1 z-20 w-32",
+            "rounded-md border border-outline/30 bg-surface",
+            "shadow-lg overflow-hidden",
+          )}
+          onMouseLeave={() => setOpen(false)}
+        >
+          {(["csv", "xlsx", "json"] as const).map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => download(f)}
+              className={cn(
+                "block w-full text-left px-3 py-1.5 text-xs",
+                "hover:bg-surface-variant/60 text-on-surface",
+              )}
+            >
+              {f === "csv"
+                ? "CSV"
+                : f === "xlsx"
+                  ? "Excel (.xlsx)"
+                  : "JSON"}
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

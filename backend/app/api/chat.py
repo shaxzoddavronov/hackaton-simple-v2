@@ -22,6 +22,8 @@ from app.metrics import (
     chat_turns_total,
     query_history_total,
 )
+from app.config import settings
+from app.services.result_export import captured_rows_for_export
 from app.services.workspace_resolver import (
     Ambiguous,
     Conflict,
@@ -277,6 +279,14 @@ async def post_chat(
                     audit_dialect,
                     audit_status,
                 )
+                # Phase 34 — cache rows for export-as-CSV/XLSX/JSON.
+                # Drop the cache silently when over budget so a single
+                # huge query doesn't bloat the metadata DB.
+                exp_cols, exp_rows = captured_rows_for_export(
+                    rs,
+                    max_rows=settings.RESULT_EXPORT_MAX_ROWS,
+                    max_bytes=settings.RESULT_EXPORT_MAX_BYTES,
+                )
                 session.add(
                     QueryHistory(
                         message_id=assistant_msg.id,
@@ -285,6 +295,8 @@ async def post_chat(
                         took_ms=rs.took_ms if rs is not None else None,
                         row_count=rs.row_count if rs is not None else None,
                         status=audit_status,
+                        result_columns=exp_cols,
+                        result_rows=exp_rows,
                     )
                 )
                 # Cardinality note: ``dialect`` is the small enum from the
@@ -440,3 +452,100 @@ async def delete_session(
     await session.delete(cs)
     await session.commit()
     # messages + query_history cascade via FK ON DELETE CASCADE.
+
+
+# ── Phase 34 — query result export ────────────────────────────────────
+
+
+_EXPORT_FORMATS = {
+    "csv": ("text/csv; charset=utf-8", "csv"),
+    "json": ("application/json", "json"),
+    "xlsx": (
+        "application/vnd.openxmlformats-officedocument."
+        "spreadsheetml.sheet",
+        "xlsx",
+    ),
+}
+
+
+@router.get("/messages/{message_id}/export")
+async def export_message_result(
+    message_id: UUID,
+    format: str = "csv",
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Download the cached result rows of one assistant message.
+
+    The result is the exact rows the agent produced when the message
+    was first generated — we don't re-run the query, both for cost
+    reasons and because federated turns store a multi-section SQL
+    summary that isn't directly re-runnable.
+
+    Authorization: only the user who owns the parent ChatSession can
+    download. 404 (not 403) on miss to avoid leaking message ids
+    across users.
+
+    Status codes:
+      * 200  — payload follows.
+      * 404  — message doesn't exist, doesn't belong to the user, or
+               has no QueryHistory row.
+      * 410  — result_rows were dropped (oversize / older than the
+               column). Re-run the question to refresh the cache.
+      * 422  — unsupported ``format``.
+    """
+    fmt = (format or "csv").lower()
+    if fmt not in _EXPORT_FORMATS:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"format must be one of {sorted(_EXPORT_FORMATS)}",
+        )
+
+    msg = await session.get(Message, message_id)
+    if msg is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Message not found")
+    cs = await session.get(ChatSession, msg.session_id)
+    if cs is None or cs.user_id != current_user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Message not found")
+
+    qh = (
+        await session.execute(
+            select(QueryHistory).where(QueryHistory.message_id == message_id)
+        )
+    ).scalar_one_or_none()
+    if qh is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "No query result is associated with this message",
+        )
+    if not qh.result_columns or qh.result_rows is None:
+        raise HTTPException(
+            status.HTTP_410_GONE,
+            "Result rows were not cached "
+            "(too large or older than the export feature). "
+            "Re-run the question to enable export.",
+        )
+
+    # Local imports to keep the heavy XLSX path out of module load.
+    from app.services.result_export import to_csv, to_json, to_xlsx
+
+    columns = list(qh.result_columns)
+    rows = list(qh.result_rows)
+    if fmt == "csv":
+        body = to_csv(columns, rows)
+    elif fmt == "json":
+        body = to_json(columns, rows)
+    else:
+        body = to_xlsx(columns, rows)
+
+    mime, ext = _EXPORT_FORMATS[fmt]
+    filename = f"querymind-{str(message_id)[:8]}.{ext}"
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Content-Length": str(len(body)),
+    }
+    return StreamingResponse(
+        iter([body]),
+        media_type=mime,
+        headers=headers,
+    )

@@ -523,3 +523,45 @@ export async function streamChat(
     }
   }
 }
+
+
+// ── Phase 34 — query result export ──────────────────────────────────
+
+export type ExportFormat = "csv" | "json" | "xlsx";
+
+/** Fetch the cached result rows of one assistant message and trigger
+ *  a browser download. Throws Error with the server's reason on 4xx —
+ *  in particular, HTTP 410 means the cache was dropped (oversize or
+ *  pre-Phase-34 message) and the user must re-ask the question.
+ */
+export async function downloadMessageExport(
+  messageId: string,
+  format: ExportFormat,
+): Promise<void> {
+  const r = await fetch(
+    `${API_BASE}/chat/messages/${messageId}/export?format=${format}`,
+    { headers: authHeader() },
+  );
+  if (!r.ok) {
+    let detail = `HTTP ${r.status}`;
+    try {
+      const body = (await r.json()) as { detail?: string };
+      if (body.detail) detail = body.detail;
+    } catch {
+      /* response body wasn't JSON */
+    }
+    throw new Error(detail);
+  }
+  const blob = await r.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  // Server-side Content-Disposition supplies the filename; the
+  // download attribute below acts as a fallback for clients that
+  // ignore the header (older Safari).
+  a.download = `querymind-${messageId.slice(0, 8)}.${format}`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}

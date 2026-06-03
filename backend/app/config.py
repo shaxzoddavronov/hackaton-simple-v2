@@ -166,6 +166,19 @@ class Settings(BaseSettings):
     QUERY_CACHE_TTL_S: int = Field(default=300, ge=1)
     # Don't bother caching huge result sets — Redis isn't a row store.
     QUERY_CACHE_MAX_ROWS: int = Field(default=5000, ge=1)
+
+    # --- Query result export (Phase 34) ----------------------------------------
+    # Result rows are cached on query_history so the export endpoints
+    # (CSV / Excel / JSON) don't re-run the query. The cap is
+    # defense-in-depth — a runaway query returning 10M rows shouldn't
+    # blow the metadata DB. Rows beyond the cap stay un-exportable;
+    # the endpoint returns 413 with a clear "result too large" message.
+    RESULT_EXPORT_MAX_ROWS: int = Field(default=10_000, ge=1)
+    # Hard byte ceiling on the JSON-serialised row payload. JSONB on
+    # Postgres handles multi-MB fine, but a 4-byte int with a 200-byte
+    # NVARCHAR cell can balloon under serialization. 8 MiB is plenty
+    # for 10k well-shaped rows and still tiny per query.
+    RESULT_EXPORT_MAX_BYTES: int = Field(default=8 * 1024 * 1024, ge=1024)
     # Hard byte ceiling on the serialised payload. 2 MB is well below
     # Redis's 512 MB string limit but enough for ~5000 rows of
     # typical analytics output.
