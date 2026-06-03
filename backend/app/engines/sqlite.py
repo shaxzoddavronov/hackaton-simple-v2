@@ -146,11 +146,16 @@ class SqliteEngine:
                         rows.append(list(row))
                         fetched += 1
                 took_ms = int((time.perf_counter() - started) * 1000)
-                # SQLite doesn't expose per-column dtypes without inferring;
-                # fall back to empty list — schema_bundle has authoritative types.
+                # SQLite doesn't expose per-column dtype in cursor.description
+                # (only column name lands there). Infer by scanning the
+                # first non-null cell of each column — shared helper so
+                # the rule matches what Mongo / ES get.
+                from app.services.value_dtype import infer_column_dtypes
+
+                dtypes = infer_column_dtypes(columns, rows)
                 return ResultSet(
                     columns=columns,
-                    dtypes=[""] * len(columns),
+                    dtypes=dtypes,
                     rows=rows,
                     row_count=len(rows),
                     truncated=truncated,

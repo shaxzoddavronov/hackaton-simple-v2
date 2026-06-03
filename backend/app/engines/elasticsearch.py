@@ -253,11 +253,19 @@ class ElasticsearchEngine:
             rows.append([src.get(c) for c in col_order])
 
         truncated = len(rows) >= row_cap
+        capped = rows[:row_cap]
+        # ES is schemaless on the wire; infer dtype per column from the
+        # first non-null cell so the chart_designer can tell numeric
+        # from date from text. Returning ``"string"`` for every column
+        # would force every chart shape to fall back to a generic table.
+        from app.services.value_dtype import infer_column_dtypes
+
+        dtypes = infer_column_dtypes(col_order, capped)
         return ResultSet(
             columns=col_order,
-            dtypes=["string"] * len(col_order),  # ES is JSON; dtype is best-effort
-            rows=rows[:row_cap],
-            row_count=len(rows[:row_cap]),
+            dtypes=dtypes,
+            rows=capped,
+            row_count=len(capped),
             truncated=truncated,
             took_ms=took_ms,
         )

@@ -342,9 +342,16 @@ class MongoEngine:
             rows.append([_coerce_doc_cell(d.get(c)) for c in columns])
 
         truncated = len(docs) > row_cap
+        # Mongo is schemaless; infer dtypes from the first non-null cell
+        # per column so the chart_designer can split numeric / date /
+        # text. Without this every Mongo answer renders as a table even
+        # when a clean bar / line was available.
+        from app.services.value_dtype import infer_column_dtypes
+
+        dtypes = infer_column_dtypes(columns, rows)
         return ResultSet(
             columns=columns,
-            dtypes=["string"] * len(columns),  # Mongo is schemaless; best-effort
+            dtypes=dtypes,
             rows=rows,
             row_count=len(rows),
             truncated=truncated,

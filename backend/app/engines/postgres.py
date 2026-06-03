@@ -247,10 +247,30 @@ class PostgresEngine:
                     await conn.execute(
                         "SET LOCAL idle_in_transaction_session_timeout = '15s'"
                     )
-                    raw = await conn.fetch(sql)
+                    # Prepare so we can read column metadata (asyncpg's
+                    # ``fetch`` alone exposes only column names). Without
+                    # dtypes the chart_designer rule engine can't tell
+                    # numeric from text and every shape falls to a
+                    # generic table.
+                    stmt = await conn.prepare(sql)
+                    raw = await stmt.fetch()
                 took_ms = int((time.perf_counter() - started) * 1000)
 
-                columns: list[str] = list(raw[0].keys()) if raw else []
+                attrs = stmt.get_attributes()
+                columns: list[str] = [a.name for a in attrs]
+                # asyncpg returns the Postgres type name verbatim
+                # (e.g. ``int4``, ``int8``, ``numeric``, ``timestamptz``,
+                # ``text``, ``varchar``, ``bool``, ``jsonb``). The
+                # chart_designer matches on these strings.
+                dtypes: list[str] = [
+                    (a.type.name or "").lower() for a in attrs
+                ]
+                # Fallback for legacy paths: if asyncpg failed to populate
+                # any name (shouldn't happen on PG ≥10), keep the column
+                # list from the first row so we don't return nothing.
+                if not columns and raw:
+                    columns = list(raw[0].keys())
+                    dtypes = [""] * len(columns)
                 truncated = len(raw) > row_cap
                 rows = [
                     [row[c] for c in columns]
@@ -258,7 +278,7 @@ class PostgresEngine:
                 ]
                 return ResultSet(
                     columns=columns,
-                    dtypes=[""] * len(columns),
+                    dtypes=dtypes,
                     rows=rows,
                     row_count=len(rows),
                     truncated=truncated,
