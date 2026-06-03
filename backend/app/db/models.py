@@ -463,6 +463,14 @@ class ChatSession(Base):
         nullable=False,
     )
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Phase 36 — rolling LLM summary of the older portion of this
+    # session's history. NULL until the first time we cross the
+    # summarisation threshold. Shape::
+    #   {"text": "...", "through_message_id": "<uuid>",
+    #    "updated_at": "<iso>"}
+    summary: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONType, nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

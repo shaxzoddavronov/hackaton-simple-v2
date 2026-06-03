@@ -22,7 +22,7 @@ Legend: ✅ done · 🔧 in progress · ⏳ queued · ⏸ blocked
 
 ## Now — currently in flight
 
-(empty — Phase 35 just shipped; loop will pick up Phase 36 next)
+(empty — Phase 36 just shipped; loop will pick up Phase 37 next)
 
 ## Shipped this session (continued)
 
@@ -38,14 +38,19 @@ Legend: ✅ done · 🔧 in progress · ⏳ queued · ⏸ blocked
   - frontend `<ConnectionStatusDot>` with green/red/grey + ↻ button
   - 12 new unit tests; suite 738 passed
 
-## Queued
+- ✅ **Phase 36 — Conversation memory pruning + summary**
+  - migration 0024 adds `chat_sessions.summary` jsonb
+  - `services/conversation_summary.py::ensure_summary` rolls the
+    older portion of a long session into one LLM-summarised
+    paragraph; threshold=30, keep_recent=10
+  - falls back to truncated transcript when vLLM is down so the
+    chat path never breaks
+  - api/chat.py prepends the summary as a `role=system` item to
+    `conversation_history` before invoking the graph
+  - 13 new unit tests covering threshold gates, transcript shape,
+    LLM happy/sad path, injected-client override; suite 751 passed
 
-- ⏳ **Phase 36 — Conversation memory pruning + summary**
-  Long chat sessions blow the LLM context. Add a node before
-  `coordinator` that, when `messages > N`, replaces the oldest M
-  user/assistant pairs with a single summary message (LLM-generated,
-  one shot). Stored as a `Message` row with `role='system'` and
-  `metadata.summary_of=[ids]`.
+## Queued
 
 - ⏳ **Phase 37 — Per-workspace usage metrics dashboard**
   Tally tokens consumed, queries executed, RAG retrievals, cache hits

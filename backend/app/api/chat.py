@@ -162,21 +162,40 @@ async def post_chat(
         chat_session.connection_id = payload.active_connection_id
 
     # Load recent conversation history BEFORE appending the new user
-    # message so the agent sees what came before. Last 10 turns (5 user
-    # + 5 assistant) is enough for follow-ups like "show as chart"
-    # without bloating prompts. Stored oldest → newest.
+    # message so the agent sees what came before. Phase 36: if the
+    # session has accumulated > SUMMARY_THRESHOLD messages, fold the
+    # OLDEST half into a persistent summary and prepend it to the
+    # agent's history instead of feeding raw old turns. Keeps prompt
+    # budget bounded across long sessions.
+    from app.services.conversation_summary import (
+        KEEP_RECENT,
+        ensure_summary,
+    )
+
+    summary_text = await ensure_summary(session, chat_session)
     history_rows = await session.execute(
         select(Message)
         .where(Message.session_id == chat_session.id)
         .order_by(Message.created_at.desc())
-        .limit(10)
+        .limit(KEEP_RECENT)
     )
     history_msgs = list(history_rows.scalars().all())
-    conversation_history = [
+    conversation_history: list[dict[str, str]] = []
+    if summary_text:
+        conversation_history.append(
+            {
+                "role": "system",
+                "content": (
+                    "Summary of earlier conversation in this session:\n"
+                    + summary_text
+                ),
+            }
+        )
+    conversation_history.extend(
         {"role": m.role, "content": m.content}
         for m in reversed(history_msgs)
         if m.role in ("user", "assistant") and m.content
-    ]
+    )
 
     user_msg = Message(
         session_id=chat_session.id,
