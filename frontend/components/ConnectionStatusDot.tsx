@@ -69,7 +69,7 @@ export function ConnectionStatusDot({
     "inline-block w-2.5 h-2.5 rounded-full shrink-0",
     tone === "ok" && "bg-emerald-400 shadow-[0_0_4px_rgb(52_211_153)]",
     tone === "fail" && "bg-rose-500 shadow-[0_0_4px_rgb(244_63_94)]",
-    tone === "unknown" && "bg-on-surface-variant/40",
+    tone === "unknown" && "bg-nd-fg-3",
   );
 
   const tooltip = (() => {

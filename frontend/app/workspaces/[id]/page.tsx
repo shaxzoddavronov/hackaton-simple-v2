@@ -58,10 +58,10 @@ const REST_PRESETS: { value: string; label: string }[] = [
 
 const STATUS_TINT: Record<string, string> = {
   pending: "text-nd-fg-2",
-  profiling: "text-secondary",
-  ready: "text-tertiary",
+  profiling: "text-nd-activity",
+  ready: "text-nd-ready",
   error: "text-nd-error",
-  auth_error: "text-nd-error",
+  auth_error: "text-nd-auth",
 };
 
 export default function WorkspaceDetailPage() {
@@ -1301,7 +1301,7 @@ function AddDocSourcePanel({
                 className="w-full input"
               />
               {slackFilename ? (
-                <span className="text-xs text-tertiary">
+                <span className="text-xs text-nd-ready">
                   Loaded {slackFilename} (
                   {Math.round((slackZipB64.length * 3) / 4 / 1024 / 1024)} MB)
                 </span>
@@ -1367,7 +1367,7 @@ function AddDocSourcePanel({
               className="w-full input"
             />
             {telegramFilename ? (
-              <span className="text-xs text-tertiary">
+              <span className="text-xs text-nd-ready">
                 Loaded {telegramFilename} (
                 {Math.round((telegramJsonB64.length * 3) / 4 / 1024)} KB)
               </span>
@@ -1837,7 +1837,7 @@ function AddConnectionPanel({
         </div>
 
         {!supported ? (
-          <div className="rounded-xl border border-outline/40 bg-nd-bg-1 px-3 py-2 text-nd-fg-2 text-xs">
+          <div className="rounded-xl border border-nd-border bg-nd-bg-1 px-3 py-2 text-nd-fg-2 text-xs">
             <b>{dialect}</b> engine hozir hali plug qilinmagan.
           </div>
         ) : null}
@@ -2655,7 +2655,7 @@ function AddConnectionPanel({
                   className="w-full input"
                 />
                 {apiSpecB64 ? (
-                  <span className="text-xs text-tertiary">
+                  <span className="text-xs text-nd-ready">
                     Loaded ({Math.round((apiSpecB64.length * 3) / 4)} bytes)
                   </span>
                 ) : null}
@@ -2861,8 +2861,8 @@ function AddConnectionPanel({
           </div>
         ) : testResult ? (
           testResult.ok ? (
-            <div className="rounded-xl border border-tertiary/40 bg-tertiary/10 px-3 py-2 text-sm">
-              <div className="text-tertiary font-semibold">
+            <div className="rounded-xl border border-nd-ready bg-nd-bg-1 px-3 py-2 text-sm">
+              <div className="text-nd-ready font-semibold">
                 ✓ Connection OK · {testResult.table_count ?? 0} tables
               </div>
               {testResult.table_names_preview &&

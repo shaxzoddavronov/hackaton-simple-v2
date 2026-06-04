@@ -167,9 +167,9 @@ export default function ConnectionSchemaPage() {
                         </td>
                         <td className="text-nd-fg-2 space-x-2">
                           {c.is_pk ? <span className="text-nd-accent">PK</span> : null}
-                          {c.is_id ? <span className="text-secondary">ID</span> : null}
+                          {c.is_id ? <span className="text-nd-activity">ID</span> : null}
                           {c.fk_to ? (
-                            <span className="text-tertiary">→ {c.fk_to}</span>
+                            <span className="text-nd-ready">→ {c.fk_to}</span>
                           ) : null}
                         </td>
                       </tr>

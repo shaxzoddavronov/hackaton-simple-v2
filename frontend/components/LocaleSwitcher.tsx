@@ -37,7 +37,7 @@ export function LocaleSwitcher() {
           className={cn(
             "px-2 py-0.5 text-xs uppercase tracking-wider rounded-md transition",
             locale === l
-              ? "bg-nd-accent/60 text-nd-accent"
+              ? "bg-nd-accent-wash text-nd-accent"
               : "text-nd-fg-2 hover:text-nd-fg-0",
           )}
         >

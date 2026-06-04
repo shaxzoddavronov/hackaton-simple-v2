@@ -140,7 +140,7 @@ const VARIANT_BORDER: Record<ToastVariant, string> = {
 };
 
 const VARIANT_ICON_COLOR: Record<ToastVariant, string> = {
-  success: "text-tertiary",
+  success: "text-nd-ready",
   error: "text-nd-error",
   info: "text-nd-fg-2",
 };
@@ -215,7 +215,7 @@ function ToastCard({
           ? "translate-x-0 opacity-100"
           : "translate-x-2 opacity-0",
         // Subtle hover affordance signalling click-to-dismiss
-        "hover:bg-nd-bg-1/70",
+        "hover:bg-nd-bg-hover",
       )}
     >
       <span

@@ -97,7 +97,7 @@ export default function WorkspaceUsagePage() {
                   className={cn(
                     "w-full rounded-t",
                     d.llm_calls > 0
-                      ? "bg-primary"
+                      ? "bg-nd-accent"
                       : "bg-nd-bg-1",
                   )}
                   style={{

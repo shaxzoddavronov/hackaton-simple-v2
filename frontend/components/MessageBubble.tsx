@@ -160,7 +160,7 @@ function CitationsList({
                   {c.chunk_index + 1}
                 </span>
                 {row && row.table ? (
-                  <span className="text-xs font-mono text-tertiary">
+                  <span className="text-xs font-mono text-nd-ready">
                     ↳ {row.table}
                     {pkPairs ? ` (${pkPairs})` : ""}
                   </span>

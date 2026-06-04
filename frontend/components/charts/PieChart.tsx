@@ -18,7 +18,7 @@ export function PieChart({ spec }: { spec: PieSpec }) {
   const data = sanitizeChartRows(spec.data);
   return (
     <div className="w-full">
-      <h3 className="font-headline text-on-surface text-lg mb-3">{spec.title}</h3>
+      <h3 className="font-headline text-nd-fg-0 text-lg mb-3">{spec.title}</h3>
       <ResponsiveContainer width="100%" height={260}>
         <RPieChart>
           <Pie

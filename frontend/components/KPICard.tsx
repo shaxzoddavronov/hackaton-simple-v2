@@ -41,7 +41,7 @@ export function KPICard({ spec }: { spec: KPI }) {
         <div
           className={
             spec.delta >= 0
-              ? "text-tertiary text-sm"
+              ? "text-nd-ready text-sm"
               : "text-nd-error text-sm"
           }
         >

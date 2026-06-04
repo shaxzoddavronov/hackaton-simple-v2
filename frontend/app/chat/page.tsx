@@ -692,7 +692,7 @@ export default function ChatPage() {
                   }…`
                 : "Ask a question…"
             }
-            className="flex-1 rounded-xl bg-surface-container-high/60 px-4 py-2 text-nd-fg-0 border border-outline/20 focus:outline-none focus:border-primary"
+            className="flex-1 rounded-xl bg-nd-bg-1 px-4 py-2 text-nd-fg-0 border border-nd-border focus:outline-none focus:border-nd-accent"
             disabled={streaming || !activeConnectionId}
           />
           <button
@@ -700,7 +700,7 @@ export default function ChatPage() {
             disabled={
               streaming || !input.trim() || !activeConnectionId
             }
-            className="rounded-xl bg-primary-container text-on-primary-container px-4 py-2 font-semibold disabled:opacity-50"
+            className="rounded-xl bg-nd-accent text-nd-on-accent px-4 py-2 font-semibold disabled:opacity-50 hover:bg-nd-accent-hover transition-colors"
           >
             Send
           </button>

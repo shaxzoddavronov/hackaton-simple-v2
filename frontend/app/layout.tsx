@@ -69,7 +69,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       lang="en"
       className={`${spaceGrotesk.variable} ${inter.variable} ${jetbrainsMono.variable}`}
     >
-      <body className="font-body text-on-surface">
+      <body className="font-body text-nd-fg-0">
         <GlassBackground />
         <I18nProvider>
           <ToastProvider>

@@ -45,7 +45,7 @@ export function CodeBlock({
   const body = (
     <div
       className={cn(
-        "relative overflow-hidden rounded-lg border border-nd-border-subtle/40 bg-nd-bg-1-low/60",
+        "relative overflow-hidden rounded-lg border border-nd-border-subtle bg-nd-bg-1",
         className,
       )}
     >
@@ -55,12 +55,12 @@ export function CodeBlock({
         aria-label={copied ? "Copied" : "Copy code"}
         className={cn(
           "absolute right-stack-md top-stack-md z-10",
-          "rounded-md border border-nd-border-subtle bg-nd-bg-1/60",
+          "rounded-md border border-nd-border-subtle bg-nd-bg-1",
           "px-stack-md py-stack-sm",
           "font-mono text-label-caps uppercase",
           "text-nd-fg-2 transition-colors",
-          "hover:border-primary-container/60 hover:text-nd-accent",
-          "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-container/60",
+          "hover:border-nd-accent hover:text-nd-accent",
+          "focus:outline-none focus-visible:ring-2 focus-visible:ring-nd-accent",
         )}
       >
         {copied ? "Copied" : "Copy"}
@@ -81,7 +81,7 @@ export function CodeBlock({
   return (
     <details
       className={cn(
-        "group rounded-lg border border-nd-border-subtle/30 bg-nd-bg-1",
+        "group rounded-lg border border-nd-border-subtle bg-nd-bg-1",
         className,
       )}
     >
