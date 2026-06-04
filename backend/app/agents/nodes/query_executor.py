@@ -41,6 +41,15 @@ async def run(state: GraphState) -> GraphState:
             "query_executor: cache HIT conn=%s sql=%s",
             cache_conn_id, sql_to_run[:80],
         )
+        # Phase 37 — count this as both a cache hit AND a successful
+        # query so the dashboard's "queries_ok" stays accurate.
+        try:
+            from app.services.usage import record_cache_hit, record_query
+
+            record_cache_hit()
+            record_query(ok=True)
+        except Exception:  # pragma: no cover
+            pass
         return {
             "result": cached_rs,
             "sql_executed": sql_to_run,
@@ -97,6 +106,14 @@ async def run(state: GraphState) -> GraphState:
         rs = await engine.execute(sql_to_run)
     except Exception as exc:
         log.exception("execute failed")
+        # Phase 37 — count the failed query (cache hit-rate stays
+        # accurate; the dashboard surfaces ok vs failed separately).
+        try:
+            from app.services.usage import record_query
+
+            record_query(ok=False)
+        except Exception:  # pragma: no cover
+            pass
         return {
             "executor_attempts": attempts,
             "last_executor_error": str(exc),
@@ -110,6 +127,13 @@ async def run(state: GraphState) -> GraphState:
         await set_cached(cache_conn_id, sql_to_run, rs)
     except Exception as e:  # pragma: no cover — defensive
         log.warning("query_executor: cache set failed: %s", e)
+
+    try:
+        from app.services.usage import record_query
+
+        record_query(ok=True)
+    except Exception:  # pragma: no cover
+        pass
 
     return {
         "result": rs,

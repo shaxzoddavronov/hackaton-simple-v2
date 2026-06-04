@@ -64,6 +64,16 @@ async def run(state: GraphState) -> GraphState:
     if not chunks:
         return {}
 
+    # Phase 37 — count the retrieval for the usage dashboard. Only
+    # successful retrievals (at least one chunk returned) count;
+    # Triton failures fall through the empty path above.
+    try:
+        from app.services.usage import record_rag
+
+        record_rag(len(chunks))
+    except Exception:  # pragma: no cover
+        pass
+
     # Derive the table qnames from schema_table chunks. Preserve order so
     # the planner sees the most-relevant tables first.
     pruned: list[str] = []

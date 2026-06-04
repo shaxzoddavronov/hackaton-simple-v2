@@ -22,7 +22,7 @@ Legend: ✅ done · 🔧 in progress · ⏳ queued · ⏸ blocked
 
 ## Now — currently in flight
 
-(empty — Phase 36 just shipped; loop will pick up Phase 37 next)
+(empty — Phase 37 just shipped; loop will pick up Phase 38 next)
 
 ## Shipped this session (continued)
 
@@ -49,6 +49,23 @@ Legend: ✅ done · 🔧 in progress · ⏳ queued · ⏸ blocked
     `conversation_history` before invoking the graph
   - 13 new unit tests covering threshold gates, transcript shape,
     LLM happy/sad path, injected-client override; suite 751 passed
+
+- ✅ **Phase 37 — Per-workspace usage metrics dashboard**
+  - migration 0025 adds `usage_daily` table (workspace_id, day, +
+    7 BigInteger counters, PK = (workspace_id, day))
+  - `services/usage.py` ContextVar-bound `UsageBucket`; recording
+    sites in agents/llm.py (token in/out), query_executor (ok/fail
+    + cache_hit), rag_retriever (retrievals); chat.py opens +
+    flushes the bucket per request
+  - flush UPSERTs via Postgres ON CONFLICT, swallows DB errors so
+    a usage hiccup never breaks the chat
+  - `GET /workspaces/{id}/usage?days=30` returns per-day rows +
+    totals; clamped to [1, 365]
+  - frontend `/workspaces/[id]/usage` page with 4 stat cards,
+    daily-LLM bar sparkline, full breakdown table
+  - 16 new unit tests covering ContextVar isolation across tasks,
+    no-op fallback without bucket, token-clamping, empty-bucket
+    skip, DB-error swallow; suite 767 passed
 
 ## Queued
 

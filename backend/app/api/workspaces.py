@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user
 from app.db.models import (
     ProfileJob,
+    UsageDaily,
     User,
     Workspace,
     WorkspaceConnection,
@@ -568,4 +569,99 @@ async def get_connection_health(
         last_health_ok=conn.last_health_ok,
         last_health_latency_ms=conn.last_health_latency_ms,
         last_health_error=conn.last_health_error,
+    )
+
+
+# ── Phase 37 — usage dashboard ──────────────────────────────────────
+
+
+class UsageDayOut(BaseModel):
+    day: str
+    llm_calls: int
+    llm_tokens_in: int
+    llm_tokens_out: int
+    queries_ok: int
+    queries_failed: int
+    rag_retrievals: int
+    cache_hits: int
+
+
+class UsageTotalsOut(BaseModel):
+    llm_calls: int = 0
+    llm_tokens_in: int = 0
+    llm_tokens_out: int = 0
+    queries_ok: int = 0
+    queries_failed: int = 0
+    rag_retrievals: int = 0
+    cache_hits: int = 0
+
+
+class UsageReportOut(BaseModel):
+    workspace_id: str
+    days: list[UsageDayOut]
+    totals: UsageTotalsOut
+
+
+@router.get(
+    "/{workspace_id}/usage",
+    response_model=UsageReportOut,
+)
+async def get_workspace_usage(
+    workspace_id: UUID,
+    days: int = 30,
+    session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> UsageReportOut:
+    """Return the last N days of usage rollups for this workspace.
+
+    `days` defaults to 30 and is clamped to [1, 365] to bound the
+    response size. The series is ordered oldest → newest so the
+    frontend can render a bar chart left-to-right without sorting.
+    Days with zero activity simply don't appear in the response —
+    the caller can fill gaps client-side if needed.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    days = max(1, min(int(days or 30), 365))
+    await _get_owned_workspace(session, workspace_id, current_user)
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).date()
+
+    rows = (
+        await session.execute(
+            select(UsageDaily)
+            .where(
+                UsageDaily.workspace_id == workspace_id,
+                UsageDaily.day >= cutoff,
+            )
+            .order_by(UsageDaily.day.asc())
+        )
+    ).scalars().all()
+
+    day_payloads: list[UsageDayOut] = []
+    totals = UsageTotalsOut()
+    for r in rows:
+        day_payloads.append(
+            UsageDayOut(
+                day=r.day.isoformat(),
+                llm_calls=int(r.llm_calls),
+                llm_tokens_in=int(r.llm_tokens_in),
+                llm_tokens_out=int(r.llm_tokens_out),
+                queries_ok=int(r.queries_ok),
+                queries_failed=int(r.queries_failed),
+                rag_retrievals=int(r.rag_retrievals),
+                cache_hits=int(r.cache_hits),
+            )
+        )
+        totals.llm_calls += int(r.llm_calls)
+        totals.llm_tokens_in += int(r.llm_tokens_in)
+        totals.llm_tokens_out += int(r.llm_tokens_out)
+        totals.queries_ok += int(r.queries_ok)
+        totals.queries_failed += int(r.queries_failed)
+        totals.rag_retrievals += int(r.rag_retrievals)
+        totals.cache_hits += int(r.cache_hits)
+
+    return UsageReportOut(
+        workspace_id=str(workspace_id),
+        days=day_payloads,
+        totals=totals,
     )

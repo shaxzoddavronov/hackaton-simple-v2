@@ -590,3 +590,42 @@ export async function downloadMessageExport(
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
+
+// ── Phase 37 — workspace usage dashboard ──────────────────────────
+
+export type UsageDay = {
+  day: string; // ISO date
+  llm_calls: number;
+  llm_tokens_in: number;
+  llm_tokens_out: number;
+  queries_ok: number;
+  queries_failed: number;
+  rag_retrievals: number;
+  cache_hits: number;
+};
+
+export type UsageTotals = {
+  llm_calls: number;
+  llm_tokens_in: number;
+  llm_tokens_out: number;
+  queries_ok: number;
+  queries_failed: number;
+  rag_retrievals: number;
+  cache_hits: number;
+};
+
+export type UsageReport = {
+  workspace_id: string;
+  days: UsageDay[];
+  totals: UsageTotals;
+};
+
+export async function getWorkspaceUsage(
+  workspace_id: string,
+  days = 30,
+): Promise<UsageReport> {
+  return api<UsageReport>(
+    `/workspaces/${workspace_id}/usage?days=${days}`,
+  );
+}

@@ -191,6 +191,20 @@ class LLMClient:
         )
         raw = completion.choices[0].message.content or ""
 
+        # Phase 37 — record token usage for the per-workspace dashboard.
+        # The usage bucket is a ContextVar set by ``api/chat.py``; when
+        # this LLM call happens outside a request (unit tests, batch
+        # jobs), ``record_llm`` is a no-op.
+        try:
+            from app.services.usage import record_llm
+
+            usage_obj = getattr(completion, "usage", None)
+            in_tok = int(getattr(usage_obj, "prompt_tokens", 0) or 0)
+            out_tok = int(getattr(usage_obj, "completion_tokens", 0) or 0)
+            record_llm(in_tok, out_tok)
+        except Exception:  # pragma: no cover — never break the chat
+            pass
+
         # Stage 1: salvage.
         salvaged = _extract_first_json_object(raw)
         try:

@@ -222,6 +222,18 @@ async def post_chat(
         status_label = "ok"
         final_state: dict[str, Any] = {}
 
+        # Phase 37 — open a usage bucket bound to this request's
+        # async context. LLM calls, query_executor, rag_retriever
+        # and the query cache all increment counters on it; the
+        # ``finally`` block UPSERTs into ``usage_daily``.
+        from app.services.usage import (
+            clear_bucket,
+            flush_bucket,
+            start_bucket,
+        )
+
+        usage_bucket = start_bucket(str(workspace_id))
+
         try:
             graph = get_graph()
             graph_input = {
@@ -356,6 +368,17 @@ async def post_chat(
                 status=status_label,
             ).inc()
             chat_duration_seconds.observe(time.perf_counter() - _t0)
+            # Phase 37 — UPSERT the per-day counters and unbind the
+            # ContextVar so a follow-up request in the same async
+            # worker doesn't inherit stale state. Both the flush
+            # and the clear are wrapped — usage tracking must never
+            # crash the chat path even on DB failure.
+            try:
+                await flush_bucket(session, usage_bucket)
+            except Exception:  # pragma: no cover
+                log.exception("[%s] usage.flush_bucket failed", trace)
+            finally:
+                clear_bucket()
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 

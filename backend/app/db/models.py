@@ -15,13 +15,15 @@ Alembic migration `0001_initial.py` — keep them in sync.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 from uuid import UUID
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -997,6 +999,54 @@ class SavedQuestion(Base):
     )
 
 
+class UsageDaily(Base):
+    """Phase 37 — per-workspace per-day counter rollup.
+
+    One row per ``(workspace_id, day)``. UPSERTed from a
+    request-scoped ContextVar bucket flushed at the end of each chat
+    turn. Used by the admin usage dashboard to surface cost / load
+    trends; the columns are all monotonically increasing within a
+    day so the dashboard renders cumulative bars.
+    """
+
+    __tablename__ = "usage_daily"
+
+    workspace_id: Mapped[UUID] = mapped_column(
+        UUIDType,
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    llm_calls: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default=text("0")
+    )
+    llm_tokens_in: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default=text("0")
+    )
+    llm_tokens_out: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default=text("0")
+    )
+    queries_ok: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default=text("0")
+    )
+    queries_failed: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default=text("0")
+    )
+    rag_retrievals: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default=text("0")
+    )
+    cache_hits: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default=text("0")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_usage_daily_workspace_day", "workspace_id", "day"),
+    )
+
+
 __all__ = [
     "User",
     "RefreshToken",
@@ -1016,4 +1066,5 @@ __all__ = [
     "Dashboard",
     "SavedQuestion",
     "ReportSchedule",
+    "UsageDaily",
 ]
