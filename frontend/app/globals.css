@@ -1,18 +1,21 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
 /*
  * Phase 43 — Claude-design "Neural Dark v2" tokens.
  *
- * This import lands the design-system handoff bundle's foundations
- * (bg-0..2, fg-0..3, accent + status hues, type roles + utility
- * classes) at the top of the cascade. The original Material-Design-3
- * variables below are KEPT for backward compatibility while pages
- * migrate one by one; once a component is ported, it can drop its
- * old `bg-surface-container` etc. for `var(--bg-1)` and friends.
+ * The CSS spec requires `@import` rules to come BEFORE any other
+ * rule (including `@tailwind` directives). Placing them after
+ * silently breaks the PostCSS pipeline — Next.js then fails to
+ * emit `main-app.js` and the browser hits 404 on the dev chunks.
+ *
+ * neural-dark.css holds the design-system handoff bundle's
+ * foundations (bg-0..2, fg-0..3, accent + status hues, type
+ * roles + utility classes). Legacy MD3 variables below stay
+ * for back-compat while pages migrate.
  */
 @import "./neural-dark.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 /*
  * Legacy MD3 variables — mirror of tailwind.config.ts / ui_images/DESIGN.md.
