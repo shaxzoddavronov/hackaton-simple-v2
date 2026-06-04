@@ -22,10 +22,7 @@ Legend: ✅ done · 🔧 in progress · ⏳ queued · ⏸ blocked
 
 ## Now — currently in flight
 
-- 🔧 **Frontend redesign brief** (ad-hoc)
-  Writing `BACKEND_SURFACE.md` so the user can hand the full
-  backend capability set to Claude design for a frontend redesign.
-  Phase 40 (i18n) paused; resume after the redesign lands.
+(empty — Phase 40 just shipped; loop reads the queue next)
 
 ## Shipped this session (continued)
 
@@ -52,6 +49,22 @@ Legend: ✅ done · 🔧 in progress · ⏳ queued · ⏸ blocked
     `conversation_history` before invoking the graph
   - 13 new unit tests covering threshold gates, transcript shape,
     LLM happy/sad path, injected-client override; suite 751 passed
+
+- ✅ **Phase 40 — Multi-language UI (i18n) — uz / ru / en**
+  - `lib/i18n/messages.ts` — flat `Messages` type + 3 bundles
+    (uz/ru/en); function-valued keys for plurals and node-name
+    interpolation
+  - `lib/i18n/context.tsx` — `I18nProvider`, `useT()`, `useLocale()`;
+    SSR-safe (server pass = en), client effect picks up
+    `localStorage` / `navigator.language`
+  - `components/LocaleSwitcher.tsx` — UZ / RU / EN pill in the
+    top bar
+  - `app/layout.tsx` wraps the tree with `I18nProvider`;
+    `AppHeader` reads nav labels + sign-in/out copy from the
+    bundle and renders the switcher
+  - parity test (`tsx` runner) locks bundle-key drift +
+    no-empty-string invariant; ran clean: "i18n bundles: OK"
+  - Backend regression suite 798 passed (no change)
 
 - ✅ **Phase 39 — Slash commands in chat**
   - `services/slash_commands.py` parser + 6 handlers:
@@ -122,11 +135,10 @@ Legend: ✅ done · 🔧 in progress · ⏳ queued · ⏸ blocked
   `/explain` show LLM's reasoning trace, `/lang uz|ru|en` switch
   answer language. Parse in `coordinator` before intent routing.
 
-- ⏳ **Phase 40 — Multi-language UI (i18n)**
-  Uzbek (Latin) / Russian / English. Next-i18next + JSON message
-  bundles. Locale switcher in the top bar, persisted to user
-  settings. Server-side: answer-writer node already adapts to the
-  user's language; just plumb the locale through.
+(no other queued phases right now — backlog complete from the
+original plan; next session should pick up either the frontend
+redesign work that the redesign brief enables, or open follow-ups
+the user adds.)
 
 ## Blocked
 
