@@ -496,10 +496,46 @@ async def post_chat(
             except Exception as exc:
                 log.exception("[%s] graph invocation failed", trace)
                 status_label = "error"
-                yield _sse(
-                    "error",
-                    {"message": _sanitize_error_for_client(exc, trace)},
-                )
+                sanitized = _sanitize_error_for_client(exc, trace)
+                # Persist a fallback assistant turn so the user sees
+                # the error in the chat history instead of an
+                # invisible silent failure. Without this they hit
+                # send → SSE error event flashes → page refresh →
+                # only their question remains, no clue what
+                # happened. The fallback message stays in DB so
+                # `/explain` and admin audit can find it later.
+                try:
+                    fallback_spec = {
+                        "type": "text_only",
+                        "body_md": (
+                            f"⚠️ The agent failed mid-turn. "
+                            f"`trace={trace}`. {sanitized}"
+                        ),
+                    }
+                    fallback_msg = Message(
+                        session_id=chat_session.id,
+                        role="assistant",
+                        content=sanitized,
+                        ui_spec=fallback_spec,
+                    )
+                    session.add(fallback_msg)
+                    await session.commit()
+                    await session.refresh(fallback_msg)
+                    yield _sse(
+                        "final",
+                        {
+                            "ui_spec": fallback_spec,
+                            "sql": None,
+                            "assistant_message_id": str(fallback_msg.id),
+                            "sub_results": {},
+                            "citations": [],
+                        },
+                    )
+                except Exception:  # pragma: no cover
+                    log.exception(
+                        "[%s] fallback persistence also failed", trace
+                    )
+                    yield _sse("error", {"message": sanitized})
                 return
 
             ui_spec = final_state.get("ui_spec")
