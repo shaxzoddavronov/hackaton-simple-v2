@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any, AsyncIterator
+from typing import Any, AsyncIterator, Literal
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -37,6 +37,16 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
+ChatScope = Literal[
+    "table",            # narrowest — one table inside one connection
+    "database",         # one connection (the canonical default)
+    "all_databases",    # every connection in the workspace
+    "cluster",          # every connection in one ConnectionCluster
+    "all_clusters",     # every connection that belongs to ANY cluster
+    "all_connections",  # synonym for all_databases (every conn period)
+]
+
+
 class ChatRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -47,6 +57,16 @@ class ChatRequest(BaseModel):
     # data_query / dashboard turns; for chitchat / metadata the agent
     # can still respond without a specific DB.
     active_connection_id: UUID | None = None
+    # Phase 42 — scope of the question. ``database`` is the legacy
+    # default (one connection). Wider scopes trigger the federation
+    # path with the expanded connection set.
+    scope: ChatScope = "database"
+    # When scope == "table" the agent restricts schema_loader to this
+    # single qualified name (e.g. "public.orders"). Ignored for other
+    # scopes.
+    scope_table: str | None = Field(default=None, max_length=256)
+    # When scope == "cluster" this is the target cluster id.
+    scope_cluster_id: UUID | None = None
 
 
 def _sse(event: str, data: dict[str, Any]) -> bytes:

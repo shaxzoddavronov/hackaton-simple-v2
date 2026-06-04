@@ -35,6 +35,7 @@ from app.api import (
     auth,
     chat,
     cloud_auth,
+    clusters,
     data_files,
     doc_sources,
     documents,
@@ -262,6 +263,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(admin.router)
     app.include_router(workspaces.router)
+    app.include_router(clusters.router)
     app.include_router(chat.router)
     app.include_router(schema.router)
     app.include_router(settings_router.router)

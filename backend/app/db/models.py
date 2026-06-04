@@ -279,6 +279,52 @@ class Workspace(Base):
     )
 
 
+class ConnectionCluster(Base):
+    """Phase 42 — a logical grouping of N connections that act as one
+    distributed database from the user's perspective.
+
+    Cluster ≠ workspace: a workspace may hold several clusters
+    (e.g. "Prod Postgres", "Analytics ClickHouse") plus loose
+    connections that don't fit any cluster. A connection only ever
+    belongs to one cluster (or none).
+
+    The Phase 42 chat scope picker can target a single cluster
+    (federation across its connections) without forcing the user
+    to pick each connection by hand.
+    """
+
+    __tablename__ = "connection_clusters"
+
+    id: Mapped[UUID] = mapped_column(
+        UUIDType, primary_key=True, server_default=_UUID_DEFAULT
+    )
+    workspace_id: Mapped[UUID] = mapped_column(
+        UUIDType,
+        ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "workspace_id",
+            "name",
+            name="uq_connection_clusters_workspace_name",
+        ),
+        Index("ix_connection_clusters_workspace_id", "workspace_id"),
+    )
+
+
 class WorkspaceConnection(Base):
     """A single database connection inside a workspace.
 
@@ -298,6 +344,14 @@ class WorkspaceConnection(Base):
         UUIDType,
         ForeignKey("workspaces.id", ondelete="CASCADE"),
         nullable=False,
+    )
+    # Phase 42 — optional grouping into a ConnectionCluster. NULL =
+    # this connection lives on its own. A connection only ever
+    # belongs to one cluster; clusters never span workspaces.
+    cluster_id: Mapped[UUID | None] = mapped_column(
+        UUIDType,
+        ForeignKey("connection_clusters.id", ondelete="SET NULL"),
+        nullable=True,
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     dialect: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -1067,4 +1121,5 @@ __all__ = [
     "SavedQuestion",
     "ReportSchedule",
     "UsageDaily",
+    "ConnectionCluster",
 ]

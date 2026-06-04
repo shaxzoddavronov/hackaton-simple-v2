@@ -22,11 +22,13 @@ Legend: ✅ done · 🔧 in progress · ⏳ queued · ⏸ blocked
 
 ## Now — currently in flight
 
-- 🔧 **Phase 42 — Scope picker in workspace chat** (next up,
-  backend-first half)
-  Adds ConnectionCluster model + endpoint family, extends
-  GraphState with `resolved_scope`. Phase 43 frontend WIP still
-  sits in the working tree.
+- 🔧 **Phase 42 — Scope picker (frontend half)** + **Phase 43 —
+  Neural Dark refresh** queued for the next turn.
+  Phase 42 backend just shipped; the chat UI still needs the
+  scope dropdown that calls `/workspaces/{id}/clusters` and
+  passes `scope` / `scope_cluster_id` in the chat payload.
+  Phase 43 WIP frontend files (login / header / panels) are in
+  the working tree, uncommitted.
 
 ## Queued (user-added 2026-06-04)
 
@@ -85,6 +87,30 @@ Legend: ✅ done · 🔧 in progress · ⏳ queued · ⏸ blocked
     `conversation_history` before invoking the graph
   - 13 new unit tests covering threshold gates, transcript shape,
     LLM happy/sad path, injected-client override; suite 751 passed
+
+- ✅ **Phase 42 — Scope picker (backend half)**
+  - Migration 0027 adds `connection_clusters` table + nullable
+    `workspace_connections.cluster_id` (FK ON DELETE SET NULL)
+  - `ConnectionCluster` model + relationship; FK on
+    `WorkspaceConnection.cluster_id`
+  - `api/clusters.py` CRUD + membership endpoints under
+    `/workspaces/{id}/clusters` (create / list / read / patch /
+    delete + POST and DELETE `/members`)
+  - `ChatRequest.scope` (`table | database | all_databases |
+    cluster | all_clusters | all_connections`) + optional
+    `scope_table` / `scope_cluster_id`
+  - `services/scope_resolver.py::resolve_scope` translates the
+    enum into a concrete `connection_ids[]` plus a `federation`
+    flag; empty result with a clear error when the scope can't
+    resolve (no active conn for `database`, no clusters for
+    `all_clusters`, etc.)
+  - UUID round-trip helper `_as_uuid` makes the resolver work
+    under both Postgres (returns UUID) and SQLite (returns str)
+  - 11 new unit tests covering every scope branch + the empty /
+    error paths; suite 878 passed (was 867)
+  - **Wiring to the chat event-stream defers to a follow-up
+    commit** so the federation-input expansion lands together
+    with the frontend dropdown.
 
 - ✅ **Phase 41 — Row-budget guard validator**
   - `services/row_budget_validator.py::validate_row_budget` —
