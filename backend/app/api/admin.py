@@ -231,7 +231,11 @@ async def update_user(
         # of their own session and creating a one-superuser-loss
         # situation. The frontend should also gray out the toggle on
         # the calling admin's row.
-        if user.id == admin.id and not payload.is_active:
+        # str-coerced compare: on Postgres both sides are UUID; on
+        # SQLite (unit tests) ``user.id`` round-trips as str while
+        # ``admin.id`` comes back from the dependency as UUID. The
+        # self-protect contract must hold under both.
+        if str(user.id) == str(admin.id) and not payload.is_active:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
                 detail="cannot deactivate your own account",
@@ -245,7 +249,7 @@ async def update_user(
         and payload.is_superuser != user.is_superuser
     ):
         # Same idea — don't let the last admin demote themselves.
-        if user.id == admin.id and not payload.is_superuser:
+        if str(user.id) == str(admin.id) and not payload.is_superuser:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
                 detail="cannot demote your own account",
@@ -288,7 +292,7 @@ async def delete_user(
     session: AsyncSession = Depends(get_db),
     admin: User = Depends(require_superuser),
 ) -> None:
-    if user_id == admin.id:
+    if str(user_id) == str(admin.id):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             detail="cannot delete your own account",

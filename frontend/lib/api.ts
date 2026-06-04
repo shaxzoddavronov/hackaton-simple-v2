@@ -62,14 +62,102 @@ export async function login(
   return data.access_token;
 }
 
-export async function registerUser(
-  email: string,
-  password: string,
-): Promise<void> {
-  await api<{ id: string; email: string }>("/auth/register", {
+// Phase 16 — public /auth/register is gone. Account creation is
+// admin-only through /admin/users. Keeping the export name so the
+// /register page that previously imported it still type-checks
+// during the legacy import window; the function now throws a
+// clear error if a caller still reaches it.
+export async function registerUser(): Promise<never> {
+  throw new Error(
+    "Public registration is disabled. Ask an administrator to create your account.",
+  );
+}
+
+// ── Phase 16 — admin endpoints (superuser-only) ──────────────────
+
+export type AdminUser = {
+  id: string;
+  username: string;
+  email: string;
+  is_superuser: boolean;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type AuditEntry = {
+  id: string;
+  user_id: string | null;
+  action: string;
+  target_kind: string | null;
+  target_id: string | null;
+  status: "ok" | "error" | "denied";
+  payload: Record<string, unknown>;
+  client_ip: string | null;
+  user_agent: string | null;
+  created_at: string;
+};
+
+export async function listAdminUsers(): Promise<AdminUser[]> {
+  return api<AdminUser[]>("/admin/users");
+}
+
+export async function createAdminUser(payload: {
+  username: string;
+  email: string;
+  password: string;
+  is_superuser?: boolean;
+}): Promise<AdminUser> {
+  return api<AdminUser>("/admin/users", {
     method: "POST",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify(payload),
   });
+}
+
+export async function updateAdminUser(
+  user_id: string,
+  payload: Partial<{
+    is_active: boolean;
+    is_superuser: boolean;
+    password: string;
+    email: string;
+  }>,
+): Promise<AdminUser> {
+  return api<AdminUser>(`/admin/users/${user_id}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteAdminUser(user_id: string): Promise<void> {
+  const r = await fetch(`${API_BASE}/admin/users/${user_id}`, {
+    method: "DELETE",
+    headers: authHeader(),
+  });
+  if (!r.ok) {
+    let detail = `HTTP ${r.status}`;
+    try {
+      const body = (await r.json()) as { detail?: string };
+      if (body.detail) detail = body.detail;
+    } catch {
+      /* response wasn't JSON */
+    }
+    throw new Error(detail);
+  }
+}
+
+export async function listAudit(params: {
+  user_id?: string;
+  action?: string;
+  status?: "ok" | "error" | "denied";
+  limit?: number;
+} = {}): Promise<AuditEntry[]> {
+  const qs = new URLSearchParams();
+  if (params.user_id) qs.set("user_id", params.user_id);
+  if (params.action) qs.set("action", params.action);
+  if (params.status) qs.set("status", params.status);
+  if (params.limit) qs.set("limit", String(params.limit));
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return api<AuditEntry[]>(`/admin/audit${suffix}`);
 }
 
 export type TestConnectionResult = {

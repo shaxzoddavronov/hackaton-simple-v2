@@ -22,7 +22,41 @@ Legend: ✅ done · 🔧 in progress · ⏳ queued · ⏸ blocked
 
 ## Now — currently in flight
 
-(empty — Phase 40 just shipped; loop reads the queue next)
+- 🔧 **Adapting the UI to a Claude-generated design**
+  User pointed at a design URL; redesign integration starts after
+  Phase 16 finalises. Pause point — next session begins here.
+
+## Queued (user-added 2026-06-04)
+
+- ⏳ **Phase 41 — Row-budget guard validator**
+  Reject queries that would scan or return billion / trillion-row
+  results before they reach the cluster. Sits next to the existing
+  read-only / DSL validators. Estimates row scan from the planner's
+  emitted SQL using the schema's `row_count_estimate`; rejects when
+  predicted scan > configurable ceiling (default 10M). For
+  Elasticsearch / Mongo, parse the aggregation shape and refuse
+  unbounded `match_all` / no-`$limit` pipelines on indices /
+  collections above the ceiling. Surfaces to the user as a
+  text_only with a "narrow your filter" hint.
+
+- ⏳ **Phase 42 — Scope picker in workspace chat**
+  Let the user choose the scope of a question:
+  - table (one table inside one connection — most narrow)
+  - database (all tables in one connection)
+  - all databases (every connection in this workspace)
+  - cluster (a connection group representing one DB cluster —
+    new concept; needs a ClusterMembership table)
+  - all clusters (every cluster in the workspace)
+  - all connections (synonym for "all databases" if no clusters)
+
+  UI: a scope dropdown next to the current connection picker;
+  selecting "all databases" or wider triggers the federation path
+  (`multi_schema_loader → federated_planner → federated_executor`)
+  with the wider connection set. Backend additions:
+  - new ConnectionCluster table + endpoint family
+  - extend GraphState.resolved_connection_id → resolved_scope
+    (one_of {table, db, all_dbs, cluster, all_clusters})
+  - federation merge handles N-way concat / union for wide scopes
 
 ## Shipped this session (continued)
 
@@ -49,6 +83,35 @@ Legend: ✅ done · 🔧 in progress · ⏳ queued · ⏸ blocked
     `conversation_history` before invoking the graph
   - 13 new unit tests covering threshold gates, transcript shape,
     LLM happy/sad path, injected-client override; suite 751 passed
+
+- ✅ **Phase 16 — username + access/refresh token auth (closed out)**
+  - Foundation commit at `82a76fc` (login/refresh/logout/me,
+    admin user CRUD, audit middleware, refresh-token rotation,
+    bootstrap super-user)
+  - `test_auth_tokens.py` (14 tests) — fixed offset-naive
+    datetime bug in `consume_refresh_token` (SQLite strips tz)
+  - `test_audit.py` (14 tests) — middleware integration via
+    FastAPI TestClient, including `_BrokenSession` proof that
+    audit failures never break the user response
+  - `test_admin.py` (16 tests) — superuser 403 gate, CRUD round
+    trips, self-protect (no self-deactivate / self-demote /
+    self-delete), audit listing filters. Hardened the admin
+    handlers to str-coerce both sides of the self-protect
+    compare so the guard holds across Postgres ↔ SQLite UUID
+    representations.
+  - Public `/register` page replaced with an "ask your
+    administrator" panel; `registerUser` API helper now throws.
+  - New admin UI pages: `/admin/users` (list, create, toggle
+    active, toggle superuser, reset password, delete) and
+    `/admin/audit` (filterable timeline by action prefix +
+    status). Self-row buttons disabled to match the backend's
+    400 guards.
+  - AppHeader hides the Admin link unless `/auth/me` reports
+    `is_superuser=true`.
+  - i18n bundles extended with `nav_admin` across uz/ru/en;
+    parity test passes.
+  - Backend suite 842 passed (was 798); frontend type-check
+    clean.
 
 - ✅ **Phase 40 — Multi-language UI (i18n) — uz / ru / en**
   - `lib/i18n/messages.ts` — flat `Messages` type + 3 bundles

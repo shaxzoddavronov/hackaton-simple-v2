@@ -95,7 +95,13 @@ async def consume_refresh_token(
         # the old hash. We surface this distinctly so audit logs can
         # flag the user account for review.
         raise ValueError("refresh token already revoked (possible replay)")
-    if row.expires_at <= datetime.now(timezone.utc):
+    # SQLite strips tzinfo on round-trip; coerce naive timestamps as
+    # UTC before the comparison so the same code path works for
+    # both Postgres (TIMESTAMP WITH TIME ZONE) and SQLite unit tests.
+    expires_at = row.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at <= datetime.now(timezone.utc):
         raise ValueError("refresh token expired")
 
     row.revoked_at = datetime.now(timezone.utc)

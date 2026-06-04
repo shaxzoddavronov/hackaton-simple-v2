@@ -28,6 +28,7 @@ export type Messages = {
   nav_workspaces: string;
   nav_chat: string;
   nav_settings: string;
+  nav_admin: string;
   nav_sign_in: string;
   nav_sign_out: string;
   // Common buttons
@@ -93,6 +94,7 @@ export const MESSAGES: Record<Locale, Messages> = {
     nav_workspaces: "Ishchi maydonlar",
     nav_chat: "Chat",
     nav_settings: "Sozlamalar",
+    nav_admin: "Administrator",
     nav_sign_in: "Kirish",
     nav_sign_out: "Chiqish",
 
@@ -158,6 +160,7 @@ export const MESSAGES: Record<Locale, Messages> = {
     nav_workspaces: "Рабочие пространства",
     nav_chat: "Чат",
     nav_settings: "Настройки",
+    nav_admin: "Администратор",
     nav_sign_in: "Войти",
     nav_sign_out: "Выйти",
 
@@ -226,6 +229,7 @@ export const MESSAGES: Record<Locale, Messages> = {
     nav_workspaces: "Workspaces",
     nav_chat: "Chat",
     nav_settings: "Settings",
+    nav_admin: "Admin",
     nav_sign_in: "Sign in",
     nav_sign_out: "Sign out",
 

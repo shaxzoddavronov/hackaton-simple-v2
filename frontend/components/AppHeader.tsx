@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { LocaleSwitcher } from "@/components/LocaleSwitcher";
 import { clearToken, getToken } from "@/lib/api";
@@ -12,6 +13,7 @@ export function AppHeader() {
   const pathname = usePathname();
   const router = useRouter();
   const t = useT();
+  const [isSuperuser, setIsSuperuser] = useState(false);
 
   function signOut() {
     clearToken();
@@ -23,10 +25,36 @@ export function AppHeader() {
 
   const authed = typeof window !== "undefined" && Boolean(getToken());
 
+  // Phase 16 — pull the user's role so the Admin link only shows
+  // for super-users. Fire once on mount when authed; falls back
+  // to "not admin" on any network glitch.
+  useEffect(() => {
+    if (!authed) return;
+    const base =
+      process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
+    fetch(`${base}/auth/me`, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("qm.token") || ""}`,
+      },
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data && typeof data.is_superuser === "boolean") {
+          setIsSuperuser(data.is_superuser);
+        }
+      })
+      .catch(() => {
+        /* not admin, stay hidden */
+      });
+  }, [authed, pathname]);
+
   const nav = [
     { href: "/", label: t.nav_workspaces },
     { href: "/chat", label: t.nav_chat },
     { href: "/settings", label: t.nav_settings },
+    ...(isSuperuser
+      ? [{ href: "/admin/users", label: t.nav_admin }]
+      : []),
   ];
 
   return (
