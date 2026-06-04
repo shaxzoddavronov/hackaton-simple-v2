@@ -467,6 +467,23 @@ async def post_chat(
                 except Exception:  # noqa: BLE001
                     log.exception("[%s] qa_history.find_similar failed", trace)
                     hits = []
+                    # CRITICAL: when find_similar's SQL fails inside
+                    # this session (pgvector cast error, malformed
+                    # embedding, …) the Postgres transaction is
+                    # aborted at the asyncpg level — subsequent
+                    # statements on the same session raise
+                    # `InFailedSQLTransactionError` until we
+                    # rollback. Without this line, the assistant
+                    # message INSERT later in the handler would
+                    # silently die and the user would see an empty
+                    # chat turn. See chat trace ca7ea9b4.
+                    try:
+                        await session.rollback()
+                    except Exception:  # pragma: no cover
+                        log.exception(
+                            "[%s] rollback after find_similar also failed",
+                            trace,
+                        )
                 if hits:
                     yield _sse(
                         "similar",
@@ -497,6 +514,20 @@ async def post_chat(
                 log.exception("[%s] graph invocation failed", trace)
                 status_label = "error"
                 sanitized = _sanitize_error_for_client(exc, trace)
+                # The agent graph nodes use their own short-lived
+                # sessions, but defensive: if anything along the
+                # path poisoned this session's transaction, roll
+                # back so the fallback message INSERT below
+                # actually lands. Without this we'd hit a
+                # PendingRollbackError and end up with an empty
+                # turn just like before the fallback existed.
+                try:
+                    await session.rollback()
+                except Exception:  # pragma: no cover
+                    log.exception(
+                        "[%s] rollback before fallback persist failed",
+                        trace,
+                    )
                 # Persist a fallback assistant turn so the user sees
                 # the error in the chat history instead of an
                 # invisible silent failure. Without this they hit
