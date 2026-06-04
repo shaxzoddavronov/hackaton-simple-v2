@@ -234,6 +234,106 @@ async def post_chat(
 
         usage_bucket = start_bucket(str(workspace_id))
 
+        # Phase 39 — slash-command short-circuit. If the user typed
+        # /sql, /help, /clear-cache, ... we handle it here without
+        # spinning up the agent graph or paying a vLLM round-trip.
+        from app.services.slash_commands import (
+            handle_command,
+            parse_command,
+        )
+
+        slash = parse_command(payload.message)
+        if slash is not None:
+            # Pull the most recent SQL the agent produced in this
+            # session so /sql can echo it without re-running.
+            last_sql_row = (
+                await session.execute(
+                    select(QueryHistory)
+                    .join(Message, Message.id == QueryHistory.message_id)
+                    .where(Message.session_id == chat_session.id)
+                    .order_by(QueryHistory.created_at.desc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+            last_sql = last_sql_row.sql_text if last_sql_row else None
+
+            result = await handle_command(
+                slash,
+                db=session,
+                user_id=current_user.id,
+                workspace_id=workspace_id,
+                connection_id=payload.active_connection_id,
+                last_sql=last_sql,
+            )
+
+            # Run any side-effect the handler requested. Each runs
+            # behind a defensive try/except so a Redis hiccup or a
+            # missing module never breaks the chat path.
+            if result.clear_cache_connection_id:
+                try:
+                    from app.services.query_cache import (
+                        invalidate_connection,
+                    )
+
+                    await invalidate_connection(
+                        str(result.clear_cache_connection_id)
+                    )
+                except Exception:  # noqa: BLE001
+                    log.exception("[%s] /clear-cache failed", trace)
+            if result.refresh_connection_id:
+                try:
+                    from app.db.models import ProfileJob
+
+                    job = ProfileJob(
+                        connection_id=result.refresh_connection_id,
+                        state="queued",
+                    )
+                    session.add(job)
+                    await session.commit()
+                except Exception:  # noqa: BLE001
+                    log.exception("[%s] /refresh-schema enqueue failed", trace)
+
+            # Persist the assistant turn so /sql, /lang etc. show up
+            # in the chat history just like a normal answer.
+            assistant_msg = Message(
+                session_id=chat_session.id,
+                role="assistant",
+                content=result.body,
+                ui_spec=result.ui_spec,
+            )
+            session.add(assistant_msg)
+            await session.commit()
+            await session.refresh(assistant_msg)
+
+            yield _sse(
+                "session",
+                {
+                    "session_id": str(chat_session.id),
+                    "workspace_id": (
+                        str(workspace_id) if workspace_id else None
+                    ),
+                    "connection_id": (
+                        str(payload.active_connection_id)
+                        if payload.active_connection_id
+                        else None
+                    ),
+                },
+            )
+            yield _sse(
+                "final",
+                {
+                    "ui_spec": result.ui_spec,
+                    "sql": None,
+                    "assistant_message_id": str(assistant_msg.id),
+                    "sub_results": {},
+                    "citations": [],
+                },
+            )
+            # Skip the rest of the graph path — slash commands are
+            # their own terminal flow.
+            final_state["intent"] = "slash_command"
+            return
+
         try:
             graph = get_graph()
             graph_input = {

@@ -22,7 +22,7 @@ Legend: ✅ done · 🔧 in progress · ⏳ queued · ⏸ blocked
 
 ## Now — currently in flight
 
-(empty — Phase 38 just shipped; loop will pick up Phase 39 next)
+(empty — Phase 39 just shipped; loop will pick up Phase 40 next)
 
 ## Shipped this session (continued)
 
@@ -49,6 +49,20 @@ Legend: ✅ done · 🔧 in progress · ⏳ queued · ⏸ blocked
     `conversation_history` before invoking the graph
   - 13 new unit tests covering threshold gates, transcript shape,
     LLM happy/sad path, injected-client override; suite 751 passed
+
+- ✅ **Phase 39 — Slash commands in chat**
+  - `services/slash_commands.py` parser + 6 handlers:
+    `/help`, `/sql` (echo last SQL), `/lang uz|ru|en`,
+    `/clear-cache`, `/refresh-schema`, `/explain`
+  - api/chat.py short-circuits before the agent graph when a
+    slash command is detected — no vLLM round-trip
+  - side-effects (cache invalidation + ProfileJob enqueue) run
+    behind defensive try/except so a Redis hiccup never breaks
+    the chat path
+  - assistant turn is persisted so commands appear in history
+    like normal answers
+  - 17 new unit tests covering parser edge cases + every
+    handler's happy / sad / no-arg path; suite 798 passed
 
 - ✅ **Phase 38 — Question similarity recall via qa_history chunks**
   - migration 0026 widens `rag_chunks.kind` CHECK to include
