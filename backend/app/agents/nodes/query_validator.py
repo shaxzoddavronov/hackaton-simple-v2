@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 from app.agents.state import GraphState
+from app.config import settings
 from app.services.api_query_validator import validate_api_query
 from app.services.es_readonly_validator import validate_es_query
 from app.services.graphql_readonly_validator import validate_graphql_query
 from app.services.mongo_readonly_validator import validate_mongo_query
 from app.services.readonly_validator import validate_readonly
+from app.services.row_budget_validator import (
+    DEFAULT_MAX_PREDICTED_ROWS,
+    validate_row_budget,
+)
 
 
 async def run(state: GraphState) -> GraphState:
@@ -32,6 +37,24 @@ async def run(state: GraphState) -> GraphState:
         result, _envelope = validate_graphql_query(plan.sql)
     else:
         result = validate_readonly(plan.sql, dialect=plan.dialect)
+
+    # Phase 41 — row-budget guard. Runs only when the read-only /
+    # DSL check passed; rejecting on budget would otherwise mask
+    # the more critical security finding. Advisory by default: no
+    # schema bundle / no row_count_estimate → pass.
+    if result.ok:
+        cap = getattr(
+            settings, "MAX_PREDICTED_ROWS", DEFAULT_MAX_PREDICTED_ROWS
+        )
+        budget = validate_row_budget(
+            plan.sql,
+            dialect=plan.dialect,
+            schema_bundle=state.get("schema_bundle"),
+            max_predicted_rows=cap,
+        )
+        if not budget.ok:
+            result = budget
+
     out: GraphState = {"validation": result}
     if not result.ok:
         codes = ", ".join(f.code for f in result.findings) or "unknown"

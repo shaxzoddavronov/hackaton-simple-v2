@@ -22,9 +22,11 @@ Legend: ✅ done · 🔧 in progress · ⏳ queued · ⏸ blocked
 
 ## Now — currently in flight
 
-- 🔧 **Adapting the UI to a Claude-generated design**
-  User pointed at a design URL; redesign integration starts after
-  Phase 16 finalises. Pause point — next session begins here.
+- 🔧 **Phase 42 — Scope picker in workspace chat** (next up,
+  backend-first half)
+  Adds ConnectionCluster model + endpoint family, extends
+  GraphState with `resolved_scope`. Phase 43 frontend WIP still
+  sits in the working tree.
 
 ## Queued (user-added 2026-06-04)
 
@@ -83,6 +85,26 @@ Legend: ✅ done · 🔧 in progress · ⏳ queued · ⏸ blocked
     `conversation_history` before invoking the graph
   - 13 new unit tests covering threshold gates, transcript shape,
     LLM happy/sad path, injected-client override; suite 751 passed
+
+- ✅ **Phase 41 — Row-budget guard validator**
+  - `services/row_budget_validator.py::validate_row_budget` —
+    per-dialect predicted-scan check
+  - SQL path: sqlglot AST walk → tables touched → sum
+    `row_count_estimate` from the bundle → reject when over
+    `Settings.MAX_PREDICTED_ROWS` (default 10M) AND no LIMIT /
+    lone-aggregate / TOP escape hatch
+  - ES path: bare `match_all` against an over-cap index without
+    `size` or `aggs` → reject
+  - Mongo path: pipeline with no `$limit` / `$group` / `$count`
+    against an over-cap collection → reject
+  - REST API + GraphQL: skipped (external systems, HTTP timeout
+    is the only ceiling)
+  - Wired into `agents/nodes/query_validator.py` after the
+    read-only / DSL check so a security finding always wins
+  - Advisory when no bundle / no estimates — never gate-blocks
+    a fresh / unprofiled connection
+  - 25 new unit tests covering every pass + reject path;
+    suite 867 passed (was 842)
 
 - ✅ **Phase 16 — username + access/refresh token auth (closed out)**
   - Foundation commit at `82a76fc` (login/refresh/logout/me,

@@ -184,6 +184,14 @@ class Settings(BaseSettings):
     # typical analytics output.
     QUERY_CACHE_MAX_BYTES: int = Field(default=2 * 1024 * 1024, ge=1)
 
+    # --- Row-budget guard (Phase 41) ------------------------------------------
+    # Cap the predicted scan size (sum of row_count_estimate over the
+    # tables a SQL query touches; doc count of the index/collection
+    # for ES/Mongo). Queries above the cap that have NO LIMIT and NO
+    # collapsing aggregate are rejected with ROW_BUDGET_EXCEEDED.
+    # Advisory when no estimate exists.
+    MAX_PREDICTED_ROWS: int = Field(default=10_000_000, ge=1)
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
