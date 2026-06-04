@@ -71,7 +71,12 @@ async def get_current_user(
 ) -> User:
     """Resolve the authenticated user or raise 401.
 
-    Steps: decode token -> parse UUID -> fetch user -> assert exists.
+    Steps: decode token -> parse UUID -> fetch user -> assert exists +
+    active. Phase 16: deactivated accounts (``is_active=False``) are
+    rejected even with a valid signed token, so disable-via-admin
+    takes effect at the next request without revoking each refresh
+    token by hand.
+
     Each failure collapses into the same 401 so the client cannot
     enumerate which check failed.
     """
@@ -83,9 +88,32 @@ async def get_current_user(
 
     result = await session.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
-    if user is None:
+    if user is None or not user.is_active:
         raise _CREDENTIALS_EXCEPTION
     return user
 
 
-__all__ = ["oauth2_scheme", "create_access_token", "get_current_user"]
+async def require_superuser(
+    user: User = Depends(get_current_user),
+) -> User:
+    """Gate for admin-only endpoints (Phase 16).
+
+    Returns 403 (not 401) when the caller is authenticated but lacks
+    the role — distinguishing auth from authorization helps the
+    frontend route the user to a "permission denied" UI instead of
+    the login page.
+    """
+    if not user.is_superuser:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="superuser privileges required",
+        )
+    return user
+
+
+__all__ = [
+    "oauth2_scheme",
+    "create_access_token",
+    "get_current_user",
+    "require_superuser",
+]

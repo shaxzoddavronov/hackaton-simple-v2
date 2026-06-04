@@ -31,8 +31,10 @@ for noisy in ("httpx", "httpcore", "asyncio", "sqlalchemy.engine"):
     logging.getLogger(noisy).setLevel(logging.WARNING)
 
 from app.api import (
+    admin,
     auth,
     chat,
+    cloud_auth,
     data_files,
     doc_sources,
     documents,
@@ -57,6 +59,72 @@ logger = logging.getLogger("querymind.main")
 # with Settings field defaults in app/config.py.
 _INSECURE_JWT = "dev-insecure-change-me"
 _INSECURE_MASTER = "REPLACE_WITH_BASE64_32_BYTE_KEY"
+
+
+async def _bootstrap_superuser_if_needed() -> None:
+    """Seed the first super-user from env vars when none exists yet.
+
+    Skips silently when:
+      * the env-var password is empty (operator opted out — they will
+        seed via their own migration / SQL), OR
+      * any super-user already lives in the DB.
+
+    Logs a one-line note when a seed is performed so the startup
+    output is clearly auditable.
+    """
+    pw = settings.QM_BOOTSTRAP_SUPERUSER_PASSWORD
+    if not pw:
+        return
+
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    from app.api.auth import hash_password
+    from app.db.models import User
+    from app.services.audit import log_action
+
+    Session = async_sessionmaker(engine, expire_on_commit=False)
+    async with Session() as session:
+        existing = (
+            await session.execute(
+                select(User.id).where(User.is_superuser.is_(True)).limit(1)
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            return
+
+        username = settings.QM_BOOTSTRAP_SUPERUSER_USERNAME
+        email = settings.QM_BOOTSTRAP_SUPERUSER_EMAIL
+        user = User(
+            username=username,
+            email=email,
+            password_hash=hash_password(pw),
+            is_active=True,
+            is_superuser=True,
+        )
+        session.add(user)
+        try:
+            await session.flush()
+        except Exception:
+            await session.rollback()
+            logger.warning(
+                "bootstrap superuser %r failed to seed (username/email collision?)",
+                username,
+            )
+            return
+        await log_action(
+            session,
+            action="user.bootstrap_superuser",
+            target_kind="user",
+            target_id=str(user.id),
+            payload={"username": username, "email": email},
+        )
+        await session.commit()
+        logger.warning(
+            "Bootstrapped super-user username=%s email=%s. "
+            "Change the password immediately.",
+            username, email,
+        )
 
 
 def _check_secrets() -> None:
@@ -105,6 +173,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # that the URL parsed cleanly and the dialect driver imported.
     _ = engine.url
 
+    # Phase 16: seed a super-user from QM_BOOTSTRAP_SUPERUSER_* env
+    # vars when none exists. Public ``/auth/register`` is gone, so
+    # without this a fresh database would have no way to create the
+    # first account.
+    await _bootstrap_superuser_if_needed()
+
     vllm_health_url = f"{settings.VLLM_ENDPOINT.rstrip('/')}/models"
     try:
         async with httpx.AsyncClient(timeout=1.0) as client:
@@ -118,9 +192,33 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             exc,
         )
 
+    # Phase 24 — start the real-time file watcher and prime its
+    # observer set from the DB. Best-effort: if the watchdog package
+    # is missing or one of the configured folders isn't reachable
+    # we log + continue; the daily Celery beat still runs the
+    # backstop crawl.
+    try:
+        from app.services.file_watcher import get_supervisor
+
+        supervisor = get_supervisor()
+        supervisor.ensure_running()
+        report = await supervisor.reload()
+        logger.info(
+            "file_watcher: armed observer added=%d removed=%d watched=%d",
+            report["added"], report["removed"], report["watched"],
+        )
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning("file_watcher: startup failed: %s", exc)
+
     try:
         yield
     finally:
+        try:
+            from app.services.file_watcher import get_supervisor
+
+            get_supervisor().stop()
+        except Exception:
+            pass
         await engine.dispose()
 
 
@@ -162,6 +260,7 @@ def create_app() -> FastAPI:
 
     # Routers are stubs in Wave 1 — they'll grow real routes in later waves.
     app.include_router(auth.router)
+    app.include_router(admin.router)
     app.include_router(workspaces.router)
     app.include_router(chat.router)
     app.include_router(schema.router)
@@ -169,6 +268,15 @@ def create_app() -> FastAPI:
     app.include_router(documents.router)
     app.include_router(data_files.router)
     app.include_router(doc_sources.router)
+    app.include_router(cloud_auth.router)
+
+    # Phase 16: audit-log middleware. Writes one ``http.{METHOD}.{route}``
+    # row per request (except noisy paths like /metrics, /healthz, /docs).
+    # Mounted AFTER routers so the route template is available on
+    # request.scope["route"].
+    from app.services.audit import AuditMiddleware
+
+    app.add_middleware(AuditMiddleware)
 
     # Default HTTP histograms + counters under /metrics. ``instrument()``
     # wraps every handler registered so far; ``expose()`` mounts the
