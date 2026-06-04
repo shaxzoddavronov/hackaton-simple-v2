@@ -67,7 +67,14 @@ async def run(state: GraphState) -> GraphState:
     Session = async_sessionmaker(sa_engine, expire_on_commit=False)
     try:
         async with Session() as session:
-            conn_rows = await session.execute(
+            # Phase 42 — when the chat API resolved a scope wider
+            # than `database`, it populated `scope_connection_ids`.
+            # Honour that filter so the federation runs across only
+            # the cluster / scope the user picked, not every
+            # workspace connection. Empty / unset = legacy behaviour
+            # (every ready connection).
+            scope_ids = state.get("scope_connection_ids") or []
+            stmt = (
                 select(WorkspaceConnection)
                 .where(
                     WorkspaceConnection.workspace_id == workspace_id,
@@ -75,6 +82,9 @@ async def run(state: GraphState) -> GraphState:
                 )
                 .order_by(WorkspaceConnection.created_at)
             )
+            if scope_ids:
+                stmt = stmt.where(WorkspaceConnection.id.in_(scope_ids))
+            conn_rows = await session.execute(stmt)
             connections = list(conn_rows.scalars().all())
             if not connections:
                 return {

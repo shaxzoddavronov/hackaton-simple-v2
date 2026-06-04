@@ -588,12 +588,26 @@ export type SseEvent = { event: string; data: unknown };
  * Streams an SSE response from POST /chat. Calls `onEvent` for every parsed
  * `event:`/`data:` pair. Resolves when the server closes the stream.
  */
+export type ChatScope =
+  | "table"
+  | "database"
+  | "all_databases"
+  | "cluster"
+  | "all_clusters"
+  | "all_connections";
+
 export async function streamChat(
   payload: {
     message: string;
     session_id?: string | null;
     active_workspace_id?: string | null;
     active_connection_id?: string | null;
+    /** Phase 42 — scope picker. Defaults server-side to "database". */
+    scope?: ChatScope;
+    /** When scope === "table". */
+    scope_table?: string | null;
+    /** When scope === "cluster". */
+    scope_cluster_id?: string | null;
   },
   onEvent: (evt: SseEvent) => void,
 ): Promise<void> {
@@ -727,4 +741,82 @@ export async function getWorkspaceUsage(
   return api<UsageReport>(
     `/workspaces/${workspace_id}/usage?days=${days}`,
   );
+}
+
+
+// ── Phase 42 — Connection clusters ──────────────────────────────
+
+export type Cluster = {
+  id: string;
+  workspace_id: string;
+  name: string;
+  description: string | null;
+  member_count: number;
+  created_at: string;
+};
+
+export async function listClusters(workspace_id: string): Promise<Cluster[]> {
+  return api<Cluster[]>(`/workspaces/${workspace_id}/clusters`);
+}
+
+export async function createCluster(
+  workspace_id: string,
+  payload: { name: string; description?: string | null },
+): Promise<Cluster> {
+  return api<Cluster>(`/workspaces/${workspace_id}/clusters`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateCluster(
+  workspace_id: string,
+  cluster_id: string,
+  payload: { name?: string; description?: string | null },
+): Promise<Cluster> {
+  return api<Cluster>(
+    `/workspaces/${workspace_id}/clusters/${cluster_id}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function deleteCluster(
+  workspace_id: string,
+  cluster_id: string,
+): Promise<void> {
+  const r = await fetch(
+    `${API_BASE}/workspaces/${workspace_id}/clusters/${cluster_id}`,
+    { method: "DELETE", headers: authHeader() },
+  );
+  if (!r.ok) throw new Error(`Delete cluster failed: ${r.status}`);
+}
+
+export async function addClusterMember(
+  workspace_id: string,
+  cluster_id: string,
+  connection_id: string,
+): Promise<Cluster> {
+  return api<Cluster>(
+    `/workspaces/${workspace_id}/clusters/${cluster_id}/members`,
+    {
+      method: "POST",
+      body: JSON.stringify({ connection_id }),
+    },
+  );
+}
+
+export async function removeClusterMember(
+  workspace_id: string,
+  cluster_id: string,
+  connection_id: string,
+): Promise<Cluster> {
+  const r = await fetch(
+    `${API_BASE}/workspaces/${workspace_id}/clusters/${cluster_id}/members/${connection_id}`,
+    { method: "DELETE", headers: authHeader() },
+  );
+  if (!r.ok) throw new Error(`Remove cluster member failed: ${r.status}`);
+  return (await r.json()) as Cluster;
 }

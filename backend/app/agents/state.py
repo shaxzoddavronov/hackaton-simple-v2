@@ -35,6 +35,16 @@ class GraphState(TypedDict, total=False):
     intent: str  # chitchat | metadata | data_query | dashboard | clarify
     workspace_hint: str | None
 
+    # Phase 42 — scope picker. Populated by the chat API from the
+    # user's `scope` choice. When set, the federation path filters
+    # its connection scan to only these ids (instead of "every ready
+    # connection in the workspace"). For single-connection scopes
+    # (`table`, `database`) this is `[active_connection_id]`; for
+    # cluster / all_clusters / all_connections it expands.
+    scope: str | None  # "table" | "database" | "cluster" | ...
+    scope_connection_ids: list[UUID]
+    scope_table: str | None  # narrowing for scope="table"
+
     # Schema loader / pruner
     schema_bundle: SchemaBundle | None
     pruned_table_qnames: list[str]

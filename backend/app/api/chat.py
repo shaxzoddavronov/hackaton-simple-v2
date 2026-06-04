@@ -356,6 +356,68 @@ async def post_chat(
 
         try:
             graph = get_graph()
+            # Phase 42 — resolve the requested scope into a concrete
+            # set of connection ids. For `database` (the default) we
+            # don't actually need to hit the DB; the active conn id
+            # is the answer. For wider scopes we look up cluster
+            # members or every workspace connection.
+            from app.services.scope_resolver import resolve_scope
+
+            scope_resolution = None
+            if workspace_id is not None:
+                scope_resolution = await resolve_scope(
+                    session,
+                    workspace_id=workspace_id,
+                    scope=payload.scope,
+                    active_connection_id=payload.active_connection_id,
+                    scope_cluster_id=payload.scope_cluster_id,
+                )
+                if scope_resolution.error and payload.scope != "database":
+                    # Wider scope can't be resolved → tell the user
+                    # plainly and bail. `database` falls through
+                    # because the legacy behaviour also tolerates a
+                    # missing active connection on chitchat turns.
+                    yield _sse(
+                        "session",
+                        {
+                            "session_id": str(chat_session.id),
+                            "workspace_id": (
+                                str(workspace_id)
+                                if workspace_id
+                                else None
+                            ),
+                            "connection_id": None,
+                        },
+                    )
+                    yield _sse(
+                        "final",
+                        {
+                            "ui_spec": {
+                                "type": "text_only",
+                                "body_md": (
+                                    f"Couldn't resolve scope "
+                                    f"`{payload.scope}`: "
+                                    + scope_resolution.error
+                                ),
+                            },
+                            "sql": None,
+                            "assistant_message_id": "",
+                            "sub_results": {},
+                            "citations": [],
+                        },
+                    )
+                    final_state["intent"] = "clarify"
+                    return
+
+            scope_ids = (
+                scope_resolution.connection_ids
+                if scope_resolution
+                else []
+            )
+            federate = bool(
+                scope_resolution and scope_resolution.federation
+            )
+
             graph_input = {
                 "user_id": current_user.id,
                 "session_id": chat_session.id,
@@ -365,7 +427,17 @@ async def post_chat(
                 "resolved_workspace_id": workspace_id,
                 "resolved_connection_id": payload.active_connection_id,
                 "conversation_history": conversation_history,
+                # Phase 42 — federation routing + ids the multi-
+                # schema loader uses to bound its scan.
+                "scope": payload.scope,
+                "scope_table": payload.scope_table,
+                "scope_connection_ids": scope_ids,
             }
+            # When the scope is wider than `database`, override the
+            # coordinator-decided intent so the graph routes through
+            # multi_schema_loader → federated_planner → federated_executor.
+            if federate:
+                graph_input["intent"] = "federated_query"
 
             yield _sse(
                 "session",

@@ -10,11 +10,14 @@ import {
   api,
   deleteSession,
   getToken,
+  listClusters,
   listConnections,
   listSessions,
   loadSession,
   streamChat,
+  type ChatScope,
   type ChatSessionSummary,
+  type Cluster,
   type ConnectionSummary,
 } from "@/lib/api";
 import { cn } from "@/lib/cn";
@@ -49,6 +52,13 @@ export default function ChatPage() {
   >([]);
   const [authMissing, setAuthMissing] = useState(false);
   const [activeNode, setActiveNode] = useState<string | null>(null);
+
+  // Phase 42 — scope picker. Default `database` mirrors the
+  // legacy behaviour (one connection per turn). Cluster + the
+  // multi-conn scopes trigger the federation path.
+  const [chatScope, setChatScope] = useState<ChatScope>("database");
+  const [scopeClusterId, setScopeClusterId] = useState<string | null>(null);
+  const [clusters, setClusters] = useState<Cluster[]>([]);
   const [workspaces, setWorkspaces] = useState<WorkspaceOut[] | null>(null);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(
     null,
@@ -131,6 +141,20 @@ export default function ChatPage() {
       })
       .catch(() => setConnections([]));
   }, [activeWorkspaceId, search]);
+
+  // ── Phase 42 — load clusters in parallel; populates the scope
+  //    picker's "Cluster: …" sub-options. Empty array on failure
+  //    so the scope picker still shows database / all_databases. ──
+  useEffect(() => {
+    if (!activeWorkspaceId) {
+      setClusters([]);
+      setScopeClusterId(null);
+      return;
+    }
+    listClusters(activeWorkspaceId)
+      .then(setClusters)
+      .catch(() => setClusters([]));
+  }, [activeWorkspaceId]);
 
   // ── Refresh the sidebar whenever workspace changes or after a turn ──
   const refreshHistory = useCallback(async () => {
@@ -278,6 +302,10 @@ export default function ChatPage() {
           session_id: sessionId,
           active_workspace_id: activeWorkspaceId,
           active_connection_id: activeConnectionId,
+          // Phase 42 — scope picker.
+          scope: chatScope,
+          scope_cluster_id:
+            chatScope === "cluster" ? scopeClusterId : null,
         },
         (evt) => {
           if (evt.event === "session" && evt.data && typeof evt.data === "object") {
@@ -482,7 +510,10 @@ export default function ChatPage() {
                           e.target.value,
                         );
                       }}
-                      className="rounded-lg bg-surface-container-high/60 px-3 py-2 text-on-surface border border-outline/20 focus:outline-none focus:border-primary"
+                      disabled={
+                        chatScope !== "table" && chatScope !== "database"
+                      }
+                      className="rounded-lg bg-surface-container-high/60 px-3 py-2 text-on-surface border border-outline/20 focus:outline-none focus:border-primary disabled:opacity-40"
                     >
                       {connections.map((c) => (
                         <option key={c.id} value={c.id}>
@@ -493,6 +524,47 @@ export default function ChatPage() {
                     </select>
                   </label>
                 ) : null}
+                {/* Phase 42 — scope picker. database (default) ⇒ one
+                    conn; cluster/all_* ⇒ federation. */}
+                <label className="flex flex-col text-xs text-on-surface-variant gap-1">
+                  <span className="uppercase tracking-wider">Scope</span>
+                  <select
+                    value={
+                      chatScope === "cluster" && scopeClusterId
+                        ? `cluster:${scopeClusterId}`
+                        : chatScope
+                    }
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v.startsWith("cluster:")) {
+                        setChatScope("cluster");
+                        setScopeClusterId(v.slice("cluster:".length));
+                      } else {
+                        setChatScope(v as ChatScope);
+                        setScopeClusterId(null);
+                      }
+                    }}
+                    className="rounded-lg bg-surface-container-high/60 px-3 py-2 text-on-surface border border-outline/20 focus:outline-none focus:border-primary"
+                  >
+                    <option value="database">This database</option>
+                    <option value="all_databases">All databases</option>
+                    {clusters.length > 0 ? (
+                      <>
+                        <option value="all_clusters">
+                          All clusters
+                        </option>
+                        {clusters.map((cl) => (
+                          <option
+                            key={cl.id}
+                            value={`cluster:${cl.id}`}
+                          >
+                            {`Cluster: ${cl.name} (${cl.member_count})`}
+                          </option>
+                        ))}
+                      </>
+                    ) : null}
+                  </select>
+                </label>
               </div>
             ) : null}
           </div>
