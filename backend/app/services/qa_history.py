@@ -159,30 +159,38 @@ async def find_similar(
     # cosine similarity = 1 - cosine distance (<=>). pgvector's <=>
     # returns the cosine distance for normalised vectors. bge-m3
     # output is already L2-normalised so dot product == cosine.
+    #
+    # Build the exclude clause conditionally. Earlier we used a
+    # `(:exclude IS NULL OR source_key <> :exclude_key)` pattern
+    # but asyncpg's prepared-statement protocol bails with
+    # `IndeterminateDatatypeError: could not determine data type
+    # of parameter $3` when :exclude binds to Python None — the
+    # `IS NULL` operator works on any type so the planner has no
+    # other clue. Splitting the SQL keeps each bind unambiguous.
+    params: dict[str, object] = {
+        "qvec": _format_vector(qvec),
+        "workspace_id": workspace_id,
+        "k": int(top_k),
+    }
+    exclude_clause = ""
+    if exclude_message_id is not None:
+        exclude_clause = "AND source_key <> :exclude_key"
+        params["exclude_key"] = f"qa::{exclude_message_id}"
+
     rows = await session.execute(
         sa_text(
-            """
+            f"""
             SELECT chunk_metadata,
                    1 - (embedding <=> CAST(:qvec AS vector)) AS similarity
             FROM rag_chunks
             WHERE workspace_id = :workspace_id
               AND kind = 'qa_history'
-              AND (:exclude IS NULL OR source_key <> :exclude_key)
+              {exclude_clause}
             ORDER BY embedding <=> CAST(:qvec AS vector)
             LIMIT :k
             """
         ),
-        {
-            "qvec": _format_vector(qvec),
-            "workspace_id": workspace_id,
-            "exclude": str(exclude_message_id) if exclude_message_id else None,
-            "exclude_key": (
-                f"qa::{exclude_message_id}"
-                if exclude_message_id
-                else ""
-            ),
-            "k": int(top_k),
-        },
+        params,
     )
 
     hits: list[QaHit] = []

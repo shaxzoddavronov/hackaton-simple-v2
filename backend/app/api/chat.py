@@ -181,6 +181,16 @@ async def post_chat(
     if payload.active_connection_id is not None:
         chat_session.connection_id = payload.active_connection_id
 
+    # Cache the session id as a plain UUID so downstream code (the
+    # event_stream generator, fallback persist, FK on assistant /
+    # query_history rows) never has to trigger a reload through
+    # `chat_session.id`. After any rollback inside event_stream
+    # the ORM instance becomes "expired" and attribute access
+    # would fire a SELECT — that SELECT can fail if the pool ping
+    # fails or the underlying tx is dirty, crashing the SSE
+    # response mid-stream. The id is immutable for the request.
+    chat_session_id = chat_session.id
+
     # Load recent conversation history BEFORE appending the new user
     # message so the agent sees what came before. Phase 36: if the
     # session has accumulated > SUMMARY_THRESHOLD messages, fold the
@@ -195,7 +205,7 @@ async def post_chat(
     summary_text = await ensure_summary(session, chat_session)
     history_rows = await session.execute(
         select(Message)
-        .where(Message.session_id == chat_session.id)
+        .where(Message.session_id == chat_session_id)
         .order_by(Message.created_at.desc())
         .limit(KEEP_RECENT)
     )
@@ -218,7 +228,7 @@ async def post_chat(
     )
 
     user_msg = Message(
-        session_id=chat_session.id,
+        session_id=chat_session_id,
         role="user",
         content=payload.message,
     )
@@ -232,7 +242,7 @@ async def post_chat(
         # crash happens, this is the first thing to look up.
         trace = uuid4().hex[:8]
         log.info("[%s] chat.stream START session=%s workspace=%s connection=%s",
-                 trace, chat_session.id, workspace_id, payload.active_connection_id)
+                 trace, chat_session_id, workspace_id, payload.active_connection_id)
 
         # Metric bookkeeping: wall-clock start + a label we flip in the
         # except block. ``final_state`` is defined here so the ``finally``
@@ -270,7 +280,7 @@ async def post_chat(
                 await session.execute(
                     select(QueryHistory)
                     .join(Message, Message.id == QueryHistory.message_id)
-                    .where(Message.session_id == chat_session.id)
+                    .where(Message.session_id == chat_session_id)
                     .order_by(QueryHistory.created_at.desc())
                     .limit(1)
                 )
@@ -316,7 +326,7 @@ async def post_chat(
             # Persist the assistant turn so /sql, /lang etc. show up
             # in the chat history just like a normal answer.
             assistant_msg = Message(
-                session_id=chat_session.id,
+                session_id=chat_session_id,
                 role="assistant",
                 content=result.body,
                 ui_spec=result.ui_spec,
@@ -328,7 +338,7 @@ async def post_chat(
             yield _sse(
                 "session",
                 {
-                    "session_id": str(chat_session.id),
+                    "session_id": str(chat_session_id),
                     "workspace_id": (
                         str(workspace_id) if workspace_id else None
                     ),
@@ -380,7 +390,7 @@ async def post_chat(
                     yield _sse(
                         "session",
                         {
-                            "session_id": str(chat_session.id),
+                            "session_id": str(chat_session_id),
                             "workspace_id": (
                                 str(workspace_id)
                                 if workspace_id
@@ -420,7 +430,7 @@ async def post_chat(
 
             graph_input = {
                 "user_id": current_user.id,
-                "session_id": chat_session.id,
+                "session_id": chat_session_id,
                 "user_message": payload.message,
                 "active_workspace_id": payload.active_workspace_id,
                 "active_connection_id": payload.active_connection_id,
@@ -442,7 +452,7 @@ async def post_chat(
             yield _sse(
                 "session",
                 {
-                    "session_id": str(chat_session.id),
+                    "session_id": str(chat_session_id),
                     "workspace_id": str(workspace_id) if workspace_id else None,
                     "connection_id": (
                         str(payload.active_connection_id)
@@ -544,7 +554,7 @@ async def post_chat(
                         ),
                     }
                     fallback_msg = Message(
-                        session_id=chat_session.id,
+                        session_id=chat_session_id,
                         role="assistant",
                         content=sanitized,
                         ui_spec=fallback_spec,
@@ -581,7 +591,7 @@ async def post_chat(
 
             # Persist the assistant turn + audit row.
             assistant_msg = Message(
-                session_id=chat_session.id,
+                session_id=chat_session_id,
                 role="assistant",
                 content=_extract_body(ui_spec),
                 ui_spec=ui_spec.model_dump(mode="json") if ui_spec is not None else None,
@@ -652,7 +662,7 @@ async def post_chat(
                         session,
                         workspace_id=workspace_id,
                         message_id=assistant_msg.id,
-                        session_id=chat_session.id,
+                        session_id=chat_session_id,
                         question=payload.message,
                         headline=headline,
                     )
