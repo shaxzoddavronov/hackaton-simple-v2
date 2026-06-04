@@ -22,7 +22,7 @@ Legend: ✅ done · 🔧 in progress · ⏳ queued · ⏸ blocked
 
 ## Now — currently in flight
 
-(empty — Phase 37 just shipped; loop will pick up Phase 38 next)
+(empty — Phase 38 just shipped; loop will pick up Phase 39 next)
 
 ## Shipped this session (continued)
 
@@ -49,6 +49,26 @@ Legend: ✅ done · 🔧 in progress · ⏳ queued · ⏸ blocked
     `conversation_history` before invoking the graph
   - 13 new unit tests covering threshold gates, transcript shape,
     LLM happy/sad path, injected-client override; suite 751 passed
+
+- ✅ **Phase 38 — Question similarity recall via qa_history chunks**
+  - migration 0026 widens `rag_chunks.kind` CHECK to include
+    `'qa_history'`
+  - `services/qa_history.py` — `index_qa_pair` (embed + INSERT
+    after successful turn) + `find_similar` (cosine-distance search
+    above threshold=0.85, top-K=3)
+  - Triton failure short-circuits both — chat path stays alive
+  - api/chat.py emits new `similar` SSE event BEFORE agent run;
+    indexes `(question, headline)` after the assistant message
+    lands (only for data_query / dashboard / metadata / federated
+    intents)
+  - `_extract_headline` helper picks a short label from any
+    UISpec variant (kpi label+value, text_only first line, chart
+    title, dashboard recurse)
+  - frontend chat page renders a chip rail with the top hits;
+    clicking populates the input
+  - 14 new unit tests for threshold gate, min-length skip, Triton
+    failure swallow, INSERT/rollback path, JSON-string metadata
+    decode; suite 781 passed
 
 - ✅ **Phase 37 — Per-workspace usage metrics dashboard**
   - migration 0025 adds `usage_daily` table (workspace_id, day, +

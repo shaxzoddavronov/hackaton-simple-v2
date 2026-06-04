@@ -260,6 +260,38 @@ async def post_chat(
                 },
             )
 
+            # Phase 38 — emit "you asked this before" hits BEFORE the
+            # agent runs so the chip lights up immediately. Failures
+            # (Triton down, no prior rows) just yield an empty list.
+            if workspace_id is not None:
+                from app.services.qa_history import find_similar
+
+                try:
+                    hits = await find_similar(
+                        session,
+                        workspace_id=workspace_id,
+                        question=payload.message,
+                    )
+                except Exception:  # noqa: BLE001
+                    log.exception("[%s] qa_history.find_similar failed", trace)
+                    hits = []
+                if hits:
+                    yield _sse(
+                        "similar",
+                        {
+                            "hits": [
+                                {
+                                    "message_id": h.message_id,
+                                    "session_id": h.session_id,
+                                    "question": h.question,
+                                    "headline": h.headline,
+                                    "similarity": h.similarity,
+                                }
+                                for h in hits
+                            ]
+                        },
+                    )
+
             try:
                 async for event in graph.astream(graph_input):
                     # `event` is {node_name: state_delta}
@@ -341,6 +373,33 @@ async def post_chat(
             await session.commit()
             log.info("[%s] persist OK assistant_msg=%s", trace, assistant_msg.id)
 
+            # Phase 38 — index this Q-A pair for the next turn's
+            # "you asked this before" search. Only when we actually
+            # answered something useful (ui_spec present + headline
+            # extractable) and we're not on a chitchat / clarify
+            # turn. Triton failures are silent — recall is a
+            # progressive enhancement.
+            if (
+                ui_spec is not None
+                and workspace_id is not None
+                and str(final_state.get("intent") or "")
+                in ("data_query", "dashboard", "metadata", "federated_query")
+            ):
+                try:
+                    from app.services.qa_history import index_qa_pair
+
+                    headline = _extract_headline(ui_spec)
+                    await index_qa_pair(
+                        session,
+                        workspace_id=workspace_id,
+                        message_id=assistant_msg.id,
+                        session_id=chat_session.id,
+                        question=payload.message,
+                        headline=headline,
+                    )
+                except Exception:  # noqa: BLE001
+                    log.exception("[%s] qa_history.index_qa_pair failed", trace)
+
             # Federation transparency: include the per-sub-query breakdown so
             # the UI can show "Queried: pg-quiz · 12 rows, es-search · 30 rows"
             # above the chart. Empty / missing on single-DB turns.
@@ -392,6 +451,41 @@ def _extract_body(ui_spec) -> str:
         for ch in getattr(ui_spec, "children", []):
             if getattr(ch.spec, "type", None) == "text_only":
                 return getattr(ch.spec, "body_md", "")
+    return getattr(ui_spec, "title", "") or ""
+
+
+def _extract_headline(ui_spec) -> str:
+    """Pull a short headline from a UISpec for the qa_history embed.
+
+    The chart types carry a ``title`` attribute; KPI carries a
+    ``label`` + ``value`` we paste together; text_only's body_md
+    becomes the headline truncated to the first line. Dashboards
+    recurse into the first child whose spec yields a non-empty
+    headline.
+    """
+    if ui_spec is None:
+        return ""
+    t = getattr(ui_spec, "type", None)
+    if t == "kpi":
+        label = getattr(ui_spec, "label", "")
+        value = getattr(ui_spec, "value", "")
+        if label and value not in ("", None):
+            return f"{label}: {value}"
+        return str(label or value or "")
+    if t == "text_only":
+        body = (getattr(ui_spec, "body_md", "") or "").strip()
+        # First non-empty line, capped.
+        for line in body.splitlines():
+            line = line.strip()
+            if line:
+                return line[:200]
+        return ""
+    if t == "dashboard":
+        for ch in getattr(ui_spec, "children", []):
+            inner = _extract_headline(ch.spec)
+            if inner:
+                return inner
+        return getattr(ui_spec, "title", "") or ""
     return getattr(ui_spec, "title", "") or ""
 
 

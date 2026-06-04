@@ -17,6 +17,7 @@ import {
   type ChatSessionSummary,
   type ConnectionSummary,
 } from "@/lib/api";
+import { cn } from "@/lib/cn";
 import type { ChatMessage, Citation, UISpec } from "@/lib/types";
 
 type WorkspaceOut = {
@@ -37,6 +38,15 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [streaming, setStreaming] = useState(false);
+  const [similarHits, setSimilarHits] = useState<
+    Array<{
+      message_id: string;
+      session_id: string;
+      question: string;
+      headline: string;
+      similarity: number;
+    }>
+  >([]);
   const [authMissing, setAuthMissing] = useState(false);
   const [activeNode, setActiveNode] = useState<string | null>(null);
   const [workspaces, setWorkspaces] = useState<WorkspaceOut[] | null>(null);
@@ -223,6 +233,9 @@ export default function ChatPage() {
 
   async function send() {
     if (!input.trim() || streaming) return;
+    // Clear stale "asked this before" chips from the previous turn —
+    // each turn gets its own fresh set keyed to the new question.
+    setSimilarHits([]);
     if (!activeWorkspaceId) {
       setMessages((m) => [
         ...m,
@@ -276,6 +289,20 @@ export default function ChatPage() {
           } else if (evt.event === "node" && evt.data && typeof evt.data === "object") {
             const d = evt.data as { node?: string };
             if (d.node) setActiveNode(d.node);
+          } else if (evt.event === "similar" && evt.data && typeof evt.data === "object") {
+            // Phase 38 — "you asked this before" hits arrive before
+            // the agent runs. They're a soft hint; the user can
+            // ignore them and the new turn proceeds as normal.
+            const d = evt.data as {
+              hits?: Array<{
+                message_id: string;
+                session_id: string;
+                question: string;
+                headline: string;
+                similarity: number;
+              }>;
+            };
+            setSimilarHits(d.hits ?? []);
           } else if (evt.event === "final" && evt.data && typeof evt.data === "object") {
             const d = evt.data as {
               ui_spec?: UISpec | null;
@@ -537,6 +564,43 @@ export default function ChatPage() {
           ) : null}
           <div ref={endRef} />
         </div>
+
+        {/* Phase 38 — "you asked this before" chips. Show only the
+            top hits; clicking populates the input with the prior
+            question so the user can re-run with one tap. */}
+        {similarHits.length > 0 ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              Asked before
+            </span>
+            {similarHits.slice(0, 3).map((h) => (
+              <button
+                key={h.message_id}
+                type="button"
+                onClick={() => setInput(h.question)}
+                className={cn(
+                  "text-xs px-2.5 py-1 rounded-full",
+                  "bg-surface-variant/40 hover:bg-surface-variant/70",
+                  "border border-outline/30 text-on-surface",
+                  "max-w-md truncate",
+                )}
+                title={`${h.question}\n→ ${h.headline}\n(similarity ${h.similarity})`}
+              >
+                {h.question.length > 60
+                  ? h.question.slice(0, 60) + "…"
+                  : h.question}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setSimilarHits([])}
+              className="text-xs text-on-surface-variant hover:text-on-surface"
+              title="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        ) : null}
 
         <form
           onSubmit={(e) => {

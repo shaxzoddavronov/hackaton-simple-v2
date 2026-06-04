@@ -746,7 +746,7 @@ class RagChunk(Base):
     __table_args__ = (
         CheckConstraint(
             "kind IN ('schema_table','schema_column','api_endpoint',"
-            "'user_doc','harvested_doc')",
+            "'user_doc','harvested_doc','qa_history')",
             name="ck_rag_chunks_kind",
         ),
         UniqueConstraint(

@@ -592,6 +592,17 @@ export async function downloadMessageExport(
 }
 
 
+// ── Phase 38 — question similarity recall ──────────────────────
+
+export type SimilarQaHit = {
+  message_id: string;
+  session_id: string;
+  question: string;
+  headline: string;
+  similarity: number;
+};
+
+
 // ── Phase 37 — workspace usage dashboard ──────────────────────────
 
 export type UsageDay = {
