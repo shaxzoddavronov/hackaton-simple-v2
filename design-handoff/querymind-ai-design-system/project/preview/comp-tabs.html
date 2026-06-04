@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0}
+  body{background:var(--bg-0);color:var(--fg-1);font-family:var(--qm-font-body);padding:0}
+  .bar{display:flex;align-items:center;gap:4px;padding:0 18px;border-bottom:1px solid var(--border);height:52px;background:var(--bg-0)}
+  .tab{font-size:13.5px;font-weight:500;color:var(--fg-2);padding:0 13px;height:100%;display:flex;align-items:center;gap:7px;border-bottom:2px solid transparent;cursor:pointer}
+  .tab.active{color:var(--fg-0);border-bottom-color:var(--accent);font-weight:600}
+  .tab:hover:not(.active){color:var(--fg-1)}
+  .count{font-family:var(--qm-font-mono);font-size:10px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--qm-radius-pill);padding:1px 6px;color:var(--fg-2)}
+  .below{padding:20px 22px}
+  .ws{display:inline-flex;align-items:center;gap:9px;background:var(--bg-2);border:1px solid var(--border);border-radius:var(--qm-radius-md);padding:7px 12px;font-size:13px;color:var(--fg-0)}
+  .ws .m{width:7px;height:7px;border-radius:50%;background:#35D38A}
+</style></head>
+<body>
+  <div class="bar">
+    <div class="tab active">Chat</div>
+    <div class="tab">Connections <span class="count">3</span></div>
+    <div class="tab">Documents <span class="count">12</span></div>
+    <div class="tab">Dashboards <span class="count">4</span></div>
+    <div class="tab">Usage</div>
+    <div class="tab">Settings</div>
+  </div>
+  <div class="below"><span class="ws"><span class="m"></span>Growth Analytics · workspace ▾</span></div>
+</body></html>

@@ -22,13 +22,15 @@ Legend: ✅ done · 🔧 in progress · ⏳ queued · ⏸ blocked
 
 ## Now — currently in flight
 
-- 🔧 **Phase 42 — Scope picker (frontend half)** + **Phase 43 —
-  Neural Dark refresh** queued for the next turn.
-  Phase 42 backend just shipped; the chat UI still needs the
-  scope dropdown that calls `/workspaces/{id}/clusters` and
-  passes `scope` / `scope_cluster_id` in the chat payload.
-  Phase 43 WIP frontend files (login / header / panels) are in
-  the working tree, uncommitted.
+- 🔧 **Phase 43 — Neural Dark v2 refresh** (resumed)
+  WIP files already in the working tree from the earlier
+  pause: `frontend/app/neural-dark.css`, `globals.css`,
+  `layout.tsx`, `login/page.tsx`, `components/AppHeader.tsx`,
+  `components/GlassPanel.tsx`, `tailwind.config.ts`. This
+  session lands those + a sweep over the remaining pages
+  (workspaces list, register, settings, chat shell, admin
+  pages) to drop legacy MD3 tokens in favour of the
+  `var(--bg-*) / var(--fg-*) / var(--accent)` semantic vars.
 
 ## Queued (user-added 2026-06-04)
 
@@ -87,6 +89,21 @@ Legend: ✅ done · 🔧 in progress · ⏳ queued · ⏸ blocked
     `conversation_history` before invoking the graph
   - 13 new unit tests covering threshold gates, transcript shape,
     LLM happy/sad path, injected-client override; suite 751 passed
+
+- ✅ **Phase 42 — Scope picker (full ship)**
+  - backend wiring: `GraphState.scope_connection_ids`
+    populated by `api/chat.py` via `resolve_scope()`;
+    `multi_schema_loader` filters by these ids; chat API
+    overrides intent to `federated_query` when the resolution
+    is multi-conn; clarify text_only when the scope can't
+    resolve
+  - frontend: `lib/api.ts` adds `ChatScope` + `Cluster` type +
+    cluster CRUD helpers; `streamChat` passes `scope` and
+    `scope_cluster_id`; the chat page renders a scope dropdown
+    next to the database picker with options "This database",
+    "All databases", and per-workspace "Cluster: <name> (N)"
+    + "All clusters" when clusters exist; database picker
+    disables when a multi-conn scope is active
 
 - ✅ **Phase 42 — Scope picker (backend half)**
   - Migration 0027 adds `connection_clusters` table + nullable

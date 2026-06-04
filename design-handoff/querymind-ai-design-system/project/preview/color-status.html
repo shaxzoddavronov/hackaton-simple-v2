@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0}
+  body{background:var(--bg-1);color:var(--fg-1);font-family:var(--qm-font-body);padding:26px 28px}
+  .grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+  .item{display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+  .dot{width:13px;height:13px;border-radius:50%}
+  .badge{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;padding:5px 11px;border-radius:var(--qm-radius-pill)}
+  .cap{font-family:var(--qm-font-mono);font-size:9.5px;color:var(--fg-2);line-height:1.4}
+</style></head>
+<body>
+  <div class="grid">
+    <div class="item">
+      <span class="badge" style="background:#35D38A1A;color:#35D38A"><span class="dot" style="background:#35D38A"></span>ready</span>
+      <span class="cap">emerald-400<br>#35D38A · ok</span>
+    </div>
+    <div class="item">
+      <span class="badge" style="background:#4F9CF91A;color:#4F9CF9"><span class="dot" style="background:#4F9CF9"></span>profiling</span>
+      <span class="cap">blue-400<br>#4F9CF9 · activity</span>
+    </div>
+    <div class="item">
+      <span class="badge" style="background:#FB6B7C1A;color:#FB6B7C"><span class="dot" style="background:#FB6B7C"></span>error</span>
+      <span class="cap">rose-400<br>#FB6B7C</span>
+    </div>
+    <div class="item">
+      <span class="badge" style="background:#F5B13F1A;color:#F5B13F"><span class="dot" style="background:#F5B13F"></span>auth_error</span>
+      <span class="cap">amber-400<br>#F5B13F · warn</span>
+    </div>
+    <div class="item">
+      <span class="badge" style="background:#7E8DA11A;color:#9DAABB"><span class="dot" style="background:#7E8DA1"></span>pending</span>
+      <span class="cap">slate-400<br>#7E8DA1 · idle</span>
+    </div>
+  </div>
+</body></html>

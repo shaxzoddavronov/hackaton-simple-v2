@@ -3,7 +3,19 @@
 @tailwind utilities;
 
 /*
- * Neural Dark CSS variables — mirror of tailwind.config.ts / ui_images/DESIGN.md.
+ * Phase 43 — Claude-design "Neural Dark v2" tokens.
+ *
+ * This import lands the design-system handoff bundle's foundations
+ * (bg-0..2, fg-0..3, accent + status hues, type roles + utility
+ * classes) at the top of the cascade. The original Material-Design-3
+ * variables below are KEPT for backward compatibility while pages
+ * migrate one by one; once a component is ported, it can drop its
+ * old `bg-surface-container` etc. for `var(--bg-1)` and friends.
+ */
+@import "./neural-dark.css";
+
+/*
+ * Legacy MD3 variables — mirror of tailwind.config.ts / ui_images/DESIGN.md.
  * Exposed on :root so non-Tailwind consumers (Recharts SVGs, inline styles,
  * third-party widgets) can reference `var(--qm-primary)` etc.
  */
@@ -59,9 +71,43 @@
 
 html,
 body {
-  background-color: var(--qm-surface);
-  color: var(--qm-on-surface);
+  /* Phase 43 — canvas + body copy now read from Neural Dark v2 tokens.
+     `--bg-canvas` is the deepest letterbox; `--fg-1` is body copy. */
+  background-color: var(--bg-canvas);
+  color: var(--fg-1);
   min-height: 100%;
+}
+
+/* Phase 43 — global focus ring uses the documented accent glow. */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--qm-glow-focus);
+}
+
+/* Phase 43 — shared input shape so per-page forms don't reinvent the
+   sizing. New form fields can opt in by adding `class="input"`; old
+   pages keep their custom inputs untouched. */
+.input {
+  background-color: var(--bg-1);
+  color: var(--fg-0);
+  border: 1px solid var(--border);
+  border-radius: var(--qm-radius-md);
+  padding: 8px 12px;
+  font-size: var(--body-sm-size);
+  line-height: var(--body-sm-line);
+  transition: border-color var(--qm-dur) var(--qm-ease),
+              box-shadow var(--qm-dur) var(--qm-ease);
+}
+.input::placeholder {
+  color: var(--fg-3);
+}
+.input:focus {
+  border-color: var(--accent);
+  box-shadow: var(--qm-glow-focus);
+}
+.input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 body {

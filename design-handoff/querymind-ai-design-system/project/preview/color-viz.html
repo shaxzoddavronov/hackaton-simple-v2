@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0}
+  body{background:var(--bg-1);color:var(--fg-1);font-family:var(--qm-font-body);padding:24px 28px}
+  .grp{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-3);margin:0 0 12px}
+  .bars{display:flex;align-items:flex-end;gap:10px;height:74px;margin-bottom:16px}
+  .bar{flex:1;border-radius:5px 5px 0 0}
+  .grid{display:grid;grid-template-columns:repeat(8,1fr);gap:8px}
+  .sw{height:34px;border-radius:var(--qm-radius-sm)}
+  .cap{font-family:var(--qm-font-mono);font-size:9px;color:var(--fg-2);margin-top:5px;text-align:center}
+</style></head>
+<body>
+  <p class="grp">Data-viz categorical sequence — charts only</p>
+  <div class="bars">
+    <div class="bar" style="background:#34DCCB;height:100%"></div>
+    <div class="bar" style="background:#4F9CF9;height:78%"></div>
+    <div class="bar" style="background:#9B8CFF;height:64%"></div>
+    <div class="bar" style="background:#F5B13F;height:52%"></div>
+    <div class="bar" style="background:#35D38A;height:44%"></div>
+    <div class="bar" style="background:#FB6B7C;height:36%"></div>
+    <div class="bar" style="background:#2BB6A6;height:28%"></div>
+    <div class="bar" style="background:#F08FC0;height:22%"></div>
+  </div>
+  <div class="grid">
+    <div><div class="sw" style="background:#34DCCB"></div><div class="cap">cyan</div></div>
+    <div><div class="sw" style="background:#4F9CF9"></div><div class="cap">blue</div></div>
+    <div><div class="sw" style="background:#9B8CFF"></div><div class="cap">violet</div></div>
+    <div><div class="sw" style="background:#F5B13F"></div><div class="cap">amber</div></div>
+    <div><div class="sw" style="background:#35D38A"></div><div class="cap">emerald</div></div>
+    <div><div class="sw" style="background:#FB6B7C"></div><div class="cap">rose</div></div>
+    <div><div class="sw" style="background:#2BB6A6"></div><div class="cap">teal</div></div>
+    <div><div class="sw" style="background:#F08FC0"></div><div class="cap">pink</div></div>
+  </div>
+</body></html>

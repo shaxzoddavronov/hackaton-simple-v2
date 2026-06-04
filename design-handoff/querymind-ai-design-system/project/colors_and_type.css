@@ -1,0 +1,203 @@
+/* ============================================================================
+   QueryMind AI — Design Foundations
+   "Neural Dark" — a calm, technical, data-forward theme for a chat-first
+   natural-language-to-SQL analytics workspace.
+
+   This file defines TWO layers:
+     1. Raw tokens     — the palette + type primitives (--qm-*)
+     2. Semantic roles — what the UI actually references (--bg-1, --fg-1, --h1…)
+
+   Dark is the canonical theme. A light theme override lives at the bottom
+   under [data-theme="light"] for surfaces that need it (print, email digests).
+   ============================================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+:root {
+  /* ---------------------------------------------------------------------- */
+  /* 1 · RAW TOKENS                                                          */
+  /* ---------------------------------------------------------------------- */
+
+  /* — Neutrals (cool near-black ramp; the spine of the Neural Dark theme) — */
+  --qm-ink-950: #07090D;   /* deepest canvas, app letterbox            */
+  --qm-ink-900: #0A0E14;   /* base background                          */
+  --qm-ink-850: #0F141C;   /* sunken wells, code blocks                */
+  --qm-ink-800: #141B25;   /* raised surface / card                    */
+  --qm-ink-750: #1A2330;   /* hover surface                            */
+  --qm-ink-700: #212C3B;   /* active / pressed surface                 */
+  --qm-line-1:  #1E2733;   /* hairline border, low contrast            */
+  --qm-line-2:  #283443;   /* default border                           */
+  --qm-line-3:  #36465A;   /* strong border / focus ring track         */
+
+  --qm-fog-50:  #EAF0F8;   /* primary text on dark                     */
+  --qm-fog-200: #B6C2D4;   /* secondary text                           */
+  --qm-fog-400: #7E8DA1;   /* muted text, captions                     */
+  --qm-fog-500: #5B6779;   /* faint text, disabled, placeholders       */
+  --qm-fog-700: #3C4655;   /* hairline icons, dividers on dark         */
+
+  /* — Brand accent: "Neural Cyan" (query / phosphor / signal) — */
+  --qm-cyan-300: #6FF0E4;
+  --qm-cyan-400: #34DCCB;  /* PRIMARY brand accent                     */
+  --qm-cyan-500: #15B9AA;
+  --qm-cyan-600: #0E8E83;
+  --qm-cyan-050: #34DCCB14; /* accent wash (8% alpha)                  */
+
+  /* — Semantic hues (status, charts) — */
+  --qm-emerald-400: #35D38A;  /* ready / ok / success                  */
+  --qm-emerald-050: #35D38A1A;
+  --qm-blue-400:    #4F9CF9;  /* activity / profiling / harvesting     */
+  --qm-blue-050:    #4F9CF91A;
+  --qm-rose-400:    #FB6B7C;  /* error                                 */
+  --qm-rose-050:    #FB6B7C1A;
+  --qm-amber-400:   #F5B13F;  /* warning / auth_error                  */
+  --qm-amber-050:   #F5B13F1A;
+  --qm-slate-400:   #7E8DA1;  /* pending / idle / neutral              */
+  --qm-slate-050:   #7E8DA11A;
+  --qm-violet-400:  #9B8CFF;  /* data series only — never a background */
+
+  /* — Categorical data-viz sequence (charts) — */
+  --qm-viz-1: #34DCCB;  /* cyan    */
+  --qm-viz-2: #4F9CF9;  /* blue    */
+  --qm-viz-3: #9B8CFF;  /* violet  */
+  --qm-viz-4: #F5B13F;  /* amber   */
+  --qm-viz-5: #35D38A;  /* emerald */
+  --qm-viz-6: #FB6B7C;  /* rose    */
+  --qm-viz-7: #2BB6A6;  /* teal    */
+  --qm-viz-8: #F08FC0;  /* pink    */
+
+  /* — Type primitives — */
+  --qm-font-display: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  --qm-font-body:    'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --qm-font-mono:    'JetBrains Mono', 'SF Mono', ui-monospace, Menlo, monospace;
+
+  /* — Spacing scale (4px base) — */
+  --qm-space-1: 2px;
+  --qm-space-2: 4px;
+  --qm-space-3: 8px;
+  --qm-space-4: 12px;
+  --qm-space-5: 16px;
+  --qm-space-6: 20px;
+  --qm-space-7: 24px;
+  --qm-space-8: 32px;
+  --qm-space-9: 40px;
+  --qm-space-10: 48px;
+  --qm-space-11: 64px;
+  --qm-space-12: 80px;
+
+  /* — Radii — */
+  --qm-radius-sm: 6px;
+  --qm-radius-md: 10px;
+  --qm-radius-lg: 14px;
+  --qm-radius-xl: 20px;
+  --qm-radius-pill: 999px;
+
+  /* — Elevation (dark theme: shadows are deep + low-spread; glow for accent) — */
+  --qm-shadow-1: 0 1px 2px rgba(0,0,0,.45);
+  --qm-shadow-2: 0 6px 20px rgba(0,0,0,.45);
+  --qm-shadow-3: 0 20px 56px rgba(0,0,0,.55);
+  --qm-glow-accent: 0 0 0 1px rgba(52,220,203,.35), 0 0 24px rgba(52,220,203,.18);
+  --qm-glow-focus:  0 0 0 3px rgba(52,220,203,.30);
+
+  /* — Motion — */
+  --qm-ease: cubic-bezier(.2, .7, .3, 1);       /* calm, slightly eager-out */
+  --qm-ease-out: cubic-bezier(.16, 1, .3, 1);   /* decel, for entrances     */
+  --qm-dur-fast: 120ms;
+  --qm-dur: 200ms;
+  --qm-dur-slow: 360ms;
+
+  /* ---------------------------------------------------------------------- */
+  /* 2 · SEMANTIC ROLES (reference these in product CSS)                     */
+  /* ---------------------------------------------------------------------- */
+
+  /* Surfaces */
+  --bg-canvas:  var(--qm-ink-950);
+  --bg-0:       var(--qm-ink-900);
+  --bg-1:       var(--qm-ink-850);
+  --bg-2:       var(--qm-ink-800);
+  --bg-hover:   var(--qm-ink-750);
+  --bg-active:  var(--qm-ink-700);
+
+  /* Borders */
+  --border-subtle: var(--qm-line-1);
+  --border:        var(--qm-line-2);
+  --border-strong: var(--qm-line-3);
+
+  /* Text */
+  --fg-0: var(--qm-fog-50);    /* headings, primary               */
+  --fg-1: var(--qm-fog-200);   /* body                            */
+  --fg-2: var(--qm-fog-400);   /* secondary / captions            */
+  --fg-3: var(--qm-fog-500);   /* faint / placeholder / disabled  */
+
+  /* Accent */
+  --accent:       var(--qm-cyan-400);
+  --accent-hover: var(--qm-cyan-300);
+  --accent-press: var(--qm-cyan-500);
+  --accent-wash:  var(--qm-cyan-050);
+  --on-accent:    #06201E;     /* ink for text/icons on the accent fill */
+
+  /* Status roles */
+  --status-ready:     var(--qm-emerald-400);
+  --status-activity:  var(--qm-blue-400);
+  --status-error:     var(--qm-rose-400);
+  --status-auth:      var(--qm-amber-400);
+  --status-neutral:   var(--qm-slate-400);
+
+  /* ---------------------------------------------------------------------- */
+  /* 3 · SEMANTIC TYPE ROLES                                                 */
+  /* ---------------------------------------------------------------------- */
+  --display-font: var(--qm-font-display);
+  --display-size: 40px;  --display-line: 44px;  --display-weight: 700; --display-tracking: -0.02em;
+  --h1-font: var(--qm-font-display); --h1-size: 30px; --h1-line: 36px; --h1-weight: 600; --h1-tracking: -0.015em;
+  --h2-font: var(--qm-font-display); --h2-size: 23px; --h2-line: 30px; --h2-weight: 600; --h2-tracking: -0.01em;
+  --h3-font: var(--qm-font-body);    --h3-size: 18px; --h3-line: 26px; --h3-weight: 600; --h3-tracking: -0.005em;
+  --title-font: var(--qm-font-body); --title-size: 15px; --title-line: 22px; --title-weight: 600;
+  --body-font: var(--qm-font-body);  --body-size: 15px; --body-line: 23px; --body-weight: 400;
+  --body-sm-font: var(--qm-font-body); --body-sm-size: 13.5px; --body-sm-line: 20px;
+  --caption-font: var(--qm-font-body); --caption-size: 12px; --caption-line: 16px; --caption-weight: 500; --caption-tracking: 0.01em;
+  --overline-font: var(--qm-font-body); --overline-size: 11px; --overline-line: 14px; --overline-weight: 600; --overline-tracking: 0.08em;
+  --code-font: var(--qm-font-mono);  --code-size: 13px; --code-line: 21px;
+  --data-font: var(--qm-font-mono);  --data-size: 13.5px; --data-line: 20px;  /* tabular numbers in tables/KPIs */
+}
+
+/* ========================================================================== */
+/* UTILITY TYPE CLASSES (optional helpers; product can also map raw vars)     */
+/* ========================================================================== */
+.qm-display { font-family: var(--display-font); font-size: var(--display-size); line-height: var(--display-line); font-weight: var(--display-weight); letter-spacing: var(--display-tracking); color: var(--fg-0); }
+.qm-h1 { font-family: var(--h1-font); font-size: var(--h1-size); line-height: var(--h1-line); font-weight: var(--h1-weight); letter-spacing: var(--h1-tracking); color: var(--fg-0); }
+.qm-h2 { font-family: var(--h2-font); font-size: var(--h2-size); line-height: var(--h2-line); font-weight: var(--h2-weight); letter-spacing: var(--h2-tracking); color: var(--fg-0); }
+.qm-h3 { font-family: var(--h3-font); font-size: var(--h3-size); line-height: var(--h3-line); font-weight: var(--h3-weight); color: var(--fg-0); }
+.qm-title { font-family: var(--title-font); font-size: var(--title-size); line-height: var(--title-line); font-weight: var(--title-weight); color: var(--fg-0); }
+.qm-body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--body-line); font-weight: var(--body-weight); color: var(--fg-1); }
+.qm-body-sm { font-family: var(--body-sm-font); font-size: var(--body-sm-size); line-height: var(--body-sm-line); color: var(--fg-1); }
+.qm-caption { font-family: var(--caption-font); font-size: var(--caption-size); line-height: var(--caption-line); font-weight: var(--caption-weight); letter-spacing: var(--caption-tracking); color: var(--fg-2); }
+.qm-overline { font-family: var(--overline-font); font-size: var(--overline-size); line-height: var(--overline-line); font-weight: var(--overline-weight); letter-spacing: var(--overline-tracking); text-transform: uppercase; color: var(--fg-2); }
+.qm-code { font-family: var(--code-font); font-size: var(--code-size); line-height: var(--code-line); color: var(--fg-1); }
+.qm-data { font-family: var(--data-font); font-size: var(--data-size); line-height: var(--data-line); font-variant-numeric: tabular-nums; color: var(--fg-0); }
+
+/* ========================================================================== */
+/* LIGHT THEME OVERRIDE — for print / email digests / opt-in light mode       */
+/* ========================================================================== */
+[data-theme="light"] {
+  --bg-canvas: #EEF1F6;
+  --bg-0:      #F7F9FC;
+  --bg-1:      #FFFFFF;
+  --bg-2:      #FFFFFF;
+  --bg-hover:  #F1F4F9;
+  --bg-active: #E7ECF3;
+  --border-subtle: #EAEEF4;
+  --border:        #DCE3EC;
+  --border-strong: #C4CEDB;
+  --fg-0: #0E141C;
+  --fg-1: #36424F;
+  --fg-2: #687585;
+  --fg-3: #98A4B3;
+  --accent:       #0E9E90;
+  --accent-hover: #15B9AA;
+  --accent-press: #0E8E83;
+  --accent-wash:  #15B9AA12;
+  --on-accent:    #FFFFFF;
+  --qm-shadow-1: 0 1px 2px rgba(16,32,56,.08);
+  --qm-shadow-2: 0 8px 24px rgba(16,32,56,.10);
+  --qm-shadow-3: 0 24px 56px rgba(16,32,56,.16);
+  --qm-glow-focus: 0 0 0 3px rgba(14,158,144,.22);
+}

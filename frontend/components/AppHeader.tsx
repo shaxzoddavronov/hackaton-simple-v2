@@ -57,24 +57,46 @@ export function AppHeader() {
       : []),
   ];
 
+  // Phase 43 — Neural Dark v2 tokens. The header now sits on
+  // bg-0/80 with a backdrop-blur for the sticky-glass effect the
+  // design brief calls out for sticky headers / command palette.
   return (
-    <header className="sticky top-0 z-20 border-b border-outline/15 bg-surface/70 backdrop-blur-xl">
+    <header
+      className="sticky top-0 z-20 backdrop-blur-xl border-b"
+      style={{
+        backgroundColor: "color-mix(in srgb, var(--bg-0) 78%, transparent)",
+        borderColor: "var(--border-subtle)",
+      }}
+    >
       <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
-        <Link href="/" className="font-headline text-on-surface text-lg tracking-tight">
-          QueryMind <span className="text-primary">AI</span>
+        <Link
+          href="/"
+          className="font-headline text-lg tracking-tight"
+          style={{ color: "var(--fg-0)" }}
+        >
+          QueryMind{" "}
+          <span style={{ color: "var(--accent)" }}>AI</span>
         </Link>
         <nav className="flex items-center gap-1">
           {nav.map((n) => {
-            const active = pathname === n.href || (n.href !== "/" && pathname.startsWith(n.href));
+            const active =
+              pathname === n.href ||
+              (n.href !== "/" && pathname.startsWith(n.href));
             return (
               <Link
                 key={n.href}
                 href={n.href}
                 className={
-                  "px-3 py-1.5 rounded-xl text-sm transition " +
-                  (active
-                    ? "bg-primary-container/30 text-primary"
-                    : "text-on-surface-variant hover:text-on-surface")
+                  "px-3 py-1.5 rounded-lg text-sm transition-colors " +
+                  (active ? "is-active" : "is-inactive")
+                }
+                style={
+                  active
+                    ? {
+                        backgroundColor: "var(--accent-wash)",
+                        color: "var(--accent)",
+                      }
+                    : { color: "var(--fg-2)" }
                 }
               >
                 {n.label}
@@ -87,14 +109,25 @@ export function AppHeader() {
           {authed ? (
             <button
               onClick={signOut}
-              className="px-3 py-1.5 rounded-xl text-sm text-on-surface-variant hover:text-error"
+              className="px-3 py-1.5 rounded-lg text-sm transition-colors"
+              style={{ color: "var(--fg-2)" }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.color = "var(--status-error)")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.color = "var(--fg-2)")
+              }
             >
               {t.nav_sign_out}
             </button>
           ) : (
             <Link
               href="/login"
-              className="px-3 py-1.5 rounded-xl text-sm bg-primary-container/30 text-primary"
+              className="px-3 py-1.5 rounded-lg text-sm"
+              style={{
+                backgroundColor: "var(--accent-wash)",
+                color: "var(--accent)",
+              }}
             >
               {t.nav_sign_in}
             </Link>

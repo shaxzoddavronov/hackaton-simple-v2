@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0}
+  body{background:var(--bg-1);color:var(--fg-1);font-family:var(--qm-font-body);padding:22px 28px}
+  .grp{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-3);margin:0 0 11px}
+  .grp2{margin-top:20px}
+  .strip{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{display:inline-flex;align-items:center;gap:7px;font-size:12px;border-radius:var(--qm-radius-pill);padding:5px 11px;border:1px solid var(--border)}
+  .cite{background:var(--bg-2);color:var(--fg-1)}
+  .cite .ico{font-family:var(--qm-font-mono);font-size:11px;color:var(--accent)}
+  .cite .score{font-family:var(--qm-font-mono);font-size:10px;color:var(--fg-3)}
+  .sim{background:var(--accent-wash);border-color:rgba(52,220,203,.3);color:var(--accent)}
+</style></head>
+<body>
+  <p class="grp">Citation chips — RAG transparency</p>
+  <div class="strip">
+    <span class="chip cite"><span class="ico">¶</span>policy.pdf<span class="score">0.92</span></span>
+    <span class="chip cite"><span class="ico">{}</span>GET /api/v1/users<span class="score">0.88</span></span>
+    <span class="chip cite"><span class="ico">⌗</span>users.notes_file<span class="score">0.86</span></span>
+  </div>
+  <p class="grp grp2">Similar-question chips — one-tap re-run</p>
+  <div class="strip">
+    <span class="chip sim">↻ active users last 30 days</span>
+    <span class="chip sim">↻ eng faol foydalanuvchilar</span>
+  </div>
+</body></html>

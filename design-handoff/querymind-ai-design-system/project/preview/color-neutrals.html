@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0}
+  body{background:var(--bg-1);color:var(--fg-1);font-family:var(--qm-font-body);padding:24px 28px}
+  .grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+  .sw{border-radius:var(--qm-radius-md);height:56px;border:1px solid var(--border-subtle);display:flex;align-items:flex-end;padding:7px}
+  .cap{font-family:var(--qm-font-mono);font-size:9.5px;color:var(--fg-2);margin-top:6px;line-height:1.3}
+  .grp{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-3);margin:0 0 10px}
+  .grp2{margin-top:18px}
+</style></head>
+<body>
+  <p class="grp">Ink ramp — surfaces</p>
+  <div class="grid">
+    <div><div class="sw" style="background:#07090D"></div><div class="cap">ink-950<br>canvas</div></div>
+    <div><div class="sw" style="background:#0A0E14"></div><div class="cap">ink-900<br>bg-0</div></div>
+    <div><div class="sw" style="background:#0F141C"></div><div class="cap">ink-850<br>bg-1</div></div>
+    <div><div class="sw" style="background:#141B25"></div><div class="cap">ink-800<br>bg-2</div></div>
+    <div><div class="sw" style="background:#1A2330"></div><div class="cap">ink-750<br>hover</div></div>
+    <div><div class="sw" style="background:#212C3B"></div><div class="cap">ink-700<br>active</div></div>
+  </div>
+  <p class="grp grp2">Fog ramp — text + lines</p>
+  <div class="grid">
+    <div><div class="sw" style="background:#EAF0F8"></div><div class="cap">fog-50<br>fg-0</div></div>
+    <div><div class="sw" style="background:#B6C2D4"></div><div class="cap">fog-200<br>fg-1</div></div>
+    <div><div class="sw" style="background:#7E8DA1"></div><div class="cap">fog-400<br>fg-2</div></div>
+    <div><div class="sw" style="background:#5B6779"></div><div class="cap">fog-500<br>fg-3</div></div>
+    <div><div class="sw" style="background:#283443"></div><div class="cap">line-2<br>border</div></div>
+    <div><div class="sw" style="background:#36465A"></div><div class="cap">line-3<br>strong</div></div>
+  </div>
+</body></html>

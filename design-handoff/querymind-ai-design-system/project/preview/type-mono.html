@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0}
+  body{background:var(--bg-1);color:var(--fg-1);font-family:var(--qm-font-body);padding:24px 28px}
+  .lbl{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-3);margin:0 0 8px}
+  .code{font-family:var(--qm-font-mono);font-size:13px;line-height:21px;background:var(--bg-1);border:1px solid var(--border);border-radius:var(--qm-radius-md);padding:12px 14px;color:var(--fg-1);white-space:pre}
+  .k{color:var(--accent)} .s{color:var(--qm-emerald-400)} .n{color:var(--qm-amber-400)} .c{color:var(--fg-3)}
+  table{border-collapse:collapse;width:100%;margin-top:16px;font-family:var(--qm-font-mono);font-size:13px}
+  th{text-align:left;font-weight:600;color:var(--fg-2);font-size:10px;letter-spacing:.06em;text-transform:uppercase;padding:6px 12px;border-bottom:1px solid var(--border)}
+  td{padding:6px 12px;color:var(--fg-0);font-variant-numeric:tabular-nums}
+  td.num{text-align:right}
+</style></head>
+<body>
+  <p class="lbl">JetBrains Mono — SQL the agent ran (read-only)</p>
+  <div class="code"><span class="k">SELECT</span> user_id, <span class="k">count</span>(*) <span class="k">AS</span> events
+<span class="k">FROM</span> activity
+<span class="k">WHERE</span> ts > now() - <span class="n">interval</span> <span class="s">'30 days'</span>
+<span class="k">GROUP BY</span> user_id <span class="k">ORDER BY</span> events <span class="k">DESC</span> <span class="k">LIMIT</span> <span class="n">5</span>;</div>
+  <table>
+    <tr><th>user_id</th><th class="num">events</th></tr>
+    <tr><td>u_8841</td><td class="num">1,204</td></tr>
+    <tr><td>u_2093</td><td class="num">987</td></tr>
+    <tr><td>u_5512</td><td class="num">612</td></tr>
+  </table>
+</body></html>

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0}
+  body{background:var(--bg-1);color:var(--fg-1);font-family:var(--qm-font-body);padding:26px 28px}
+  .wrap{display:flex;gap:24px;align-items:center}
+  .hero{width:150px;height:130px;border-radius:var(--qm-radius-lg);background:radial-gradient(120% 120% at 30% 20%, #34DCCB 0%, #15B9AA 60%, #0E8E83 100%);display:flex;align-items:center;justify-content:center;box-shadow:var(--qm-glow-accent)}
+  .hero span{font-family:var(--qm-font-mono);font-size:13px;color:#06201E;font-weight:600}
+  .states{flex:1}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  .sw{height:48px;border-radius:var(--qm-radius-md);border:1px solid var(--border-subtle)}
+  .cap{font-family:var(--qm-font-mono);font-size:9.5px;color:var(--fg-2);margin-top:6px;line-height:1.3}
+  .lead{font-size:13px;color:var(--fg-2);margin:0 0 14px}
+  b{color:var(--accent)}
+</style></head>
+<body>
+  <div class="wrap">
+    <div class="hero"><span>#34DCCB</span></div>
+    <div class="states">
+      <p class="lead"><b>Neural Cyan</b> — the single brand accent. Primary actions, active nav, focus, links, the live "thinking" pulse.</p>
+      <div class="grid">
+        <div><div class="sw" style="background:#6FF0E4"></div><div class="cap">cyan-300<br>hover</div></div>
+        <div><div class="sw" style="background:#34DCCB"></div><div class="cap">cyan-400<br>accent</div></div>
+        <div><div class="sw" style="background:#15B9AA"></div><div class="cap">cyan-500<br>press</div></div>
+        <div><div class="sw" style="background:rgba(52,220,203,.10);border-color:rgba(52,220,203,.3)"></div><div class="cap">wash<br>8%</div></div>
+      </div>
+    </div>
+  </div>
+</body></html>

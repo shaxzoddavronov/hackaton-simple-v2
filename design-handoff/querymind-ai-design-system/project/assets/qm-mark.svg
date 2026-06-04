@@ -1,0 +1,10 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="QueryMind mark">
+  <rect x="1" y="1" width="62" height="62" rx="16" fill="#141B25"></rect>
+  <rect x="1" y="1" width="62" height="62" rx="16" stroke="#283443" stroke-width="1.5"></rect>
+  
+  <path d="M21 23 L31 32 L21 41" stroke="#34DCCB" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round"></path>
+  
+  <rect x="36" y="36" width="11" height="5.5" rx="2.4" fill="#34DCCB"></rect>
+  
+  <circle cx="43.5" cy="24" r="3" fill="#34DCCB" opacity="0.55"></circle>
+</svg>

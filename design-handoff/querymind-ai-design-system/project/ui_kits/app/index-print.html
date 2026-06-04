@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QueryMind AI — App Screens (print)</title>
+  <link rel="stylesheet" href="../../colors_and_type.css">
+  <link rel="stylesheet" href="app.css">
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+  <style>
+    body { background: var(--bg-canvas); }
+    #root { height: auto; }
+    .print-doc { display: flex; flex-direction: column; align-items: center; gap: 24px; padding: 24px 0 60px; }
+    .page-label { width: 1040px; max-width: 100%; font-family: var(--qm-font-mono); font-size: 12px; color: var(--fg-3);
+      display: flex; align-items: center; gap: 10px; }
+    .page-label .n { color: var(--accent); }
+    .page-label::after { content: ''; flex: 1; height: 1px; background: var(--border-subtle); }
+    .print-page { display: flex; flex-direction: column; gap: 10px; }
+    .app-frame { width: 1040px; max-width: 100%; height: 720px; border: 1px solid var(--border); border-radius: 14px;
+      overflow: hidden; background: var(--bg-1); position: relative; box-shadow: var(--qm-shadow-2); }
+    .app-frame .app { height: 100%; }
+    .app-frame .overlay { position: absolute; }
+
+    @media print {
+      @page { size: landscape; margin: 0.5cm; }
+      html, body { background: #fff; }
+      .print-doc { gap: 0; padding: 0; }
+      .page-label { display: none; }
+      .print-page { break-after: page; break-inside: avoid; padding: 0; }
+      .print-page:last-child { break-after: auto; }
+      .app-frame { box-shadow: none; border-radius: 10px; width: 100%; height: 700px; }
+      /* clip inner scroll regions to the frame (no scrollbars on paper) */
+      .app-frame .chat-scroll, .app-frame .view, .app-frame .sb-scroll, .app-frame .schema-tree,
+      .app-frame .schema > div { overflow: hidden !important; }
+      *, *::before, *::after {
+        -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
+        animation-delay: -99s !important; animation-duration: .001s !important;
+        animation-iteration-count: 1 !important; animation-fill-mode: both !important;
+        animation-play-state: running !important; transition-duration: 0s !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" src="data.jsx"></script>
+  <script type="text/babel" src="UISpec.jsx"></script>
+  <script type="text/babel" src="Chat.jsx"></script>
+  <script type="text/babel" src="Views.jsx"></script>
+  <script type="text/babel" src="App.jsx"></script>
+  <script type="text/babel" data-presets="react">
+    const noop = () => {};
+
+    function Shell({ tab, children }) {
+      return (
+        <React.Fragment>
+          <WorkspaceRail activeWs="w1" setActiveWs={noop} />
+          <Sidebar ws={WORKSPACES[0]} activeSession="s1" setActiveSession={noop} onNewChat={noop} />
+          <div className="main">
+            <TopBar tab={tab} setTab={noop} />
+            {children}
+          </div>
+        </React.Fragment>
+      );
+    }
+
+    function StaticChat({ msgs, withComposer }) {
+      return (
+        <div className="chat">
+          <div className="chat-scroll"><div className="chat-inner">
+            {msgs.map((m, i) => m.role === 'user' ? <UserMessage key={i} m={m} /> : <AssistantMessage key={i} m={m} />)}
+          </div></div>
+          {withComposer && <Composer onSend={noop} />}
+        </div>
+      );
+    }
+
+    const A = window.ANSWERS;
+    const kpiMsgs = [
+      { role: 'user', text: 'How many active users in the last 30 days?' },
+      { role: 'assistant', thinking: false, spec: A.kpi.spec, sql: A.kpi.sql, citations: [], headline: null },
+    ];
+    const barMsgs = [
+      { role: 'user', text: 'Revenue by region this quarter' },
+      { role: 'assistant', thinking: false, spec: A.bar.spec, sql: A.bar.sql, citations: A.bar.citations, headline: 'Here\u2019s what I found:' },
+    ];
+    const fedMsgs = [
+      { role: 'user', text: 'Compare DB quiz volume with ES search volume' },
+      { role: 'assistant', thinking: false, spec: A.federated.spec, sql: A.federated.sql, citations: A.federated.citations, federation: A.federated.federation, headline: 'Here\u2019s what I found:' },
+    ];
+
+    function Page({ n, label, h, children }) {
+      return (
+        <div className="print-page">
+          <div className="page-label"><span className="n">{n}</span> {label}</div>
+          <div className="app-frame" style={h ? { height: h } : null}>{children}</div>
+        </div>
+      );
+    }
+
+    function PrintDoc() {
+      return (
+        <div className="print-doc">
+          <Page n="01" label="Sign in" h={620}><Login onLogin={noop} /></Page>
+          <Page n="02" label="Chat · KPI answer"><div className="app"><Shell tab="chat"><StaticChat msgs={kpiMsgs} withComposer /></Shell></div></Page>
+          <Page n="03" label="Chat · bar chart answer"><div className="app"><Shell tab="chat"><StaticChat msgs={barMsgs} /></Shell></div></Page>
+          <Page n="04" label="Chat · federated table answer"><div className="app"><Shell tab="chat"><StaticChat msgs={fedMsgs} /></Shell></div></Page>
+          <Page n="05" label="Connections"><div className="app"><Shell tab="connections"><ConnectionsView onSchema={noop} /></Shell></div></Page>
+          <Page n="06" label="Add connection wizard"><div className="app"><Shell tab="connections"><ConnectionsView onSchema={noop} /></Shell><AddConnectionModal onClose={noop} /></div></Page>
+          <Page n="07" label="Dashboards" h={780}><div className="app"><Shell tab="dashboards"><DashboardsView /></Shell></div></Page>
+          <Page n="08" label="Usage"><div className="app"><Shell tab="usage"><UsageView /></Shell></div></Page>
+          <Page n="09" label="Schema explorer"><div className="app"><Shell tab="connections"><SchemaView conn={{ name: 'pg-quiz' }} onBack={noop} /></Shell></div></Page>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<PrintDoc />);
+
+    // Auto-print once fonts are loaded and Lucide icons have been injected.
+    (function waitAndPrint() {
+      const fontsReady = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
+      fontsReady.then(() => {
+        // give React + Lucide icon injection a moment, then a safety delay
+        setTimeout(() => window.print(), 1200);
+      });
+    })();
+  </script>
+</body>
+</html>

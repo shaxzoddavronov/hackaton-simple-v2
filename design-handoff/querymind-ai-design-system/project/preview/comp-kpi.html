@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0}
+  body{background:var(--bg-0);color:var(--fg-1);font-family:var(--qm-font-body);padding:22px 28px;display:flex;gap:16px}
+  .card{background:var(--bg-2);border:1px solid var(--border-subtle);border-radius:var(--qm-radius-lg);padding:18px 20px;flex:1}
+  .lbl{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--fg-2);margin:0 0 10px}
+  .val{font-family:var(--qm-font-mono);font-size:38px;font-weight:600;color:var(--fg-0);line-height:1;font-variant-numeric:tabular-nums}
+  .unit{font-size:15px;color:var(--fg-2);font-family:var(--qm-font-body);margin-left:4px}
+  .delta{display:inline-flex;align-items:center;gap:4px;font-family:var(--qm-font-mono);font-size:12px;font-weight:600;margin-top:10px}
+  .up{color:var(--qm-emerald-400)} .down{color:var(--qm-rose-400)}
+  svg{display:block;margin-top:14px}
+</style></head>
+<body>
+  <div class="card">
+    <p class="lbl">Active users · 30d</p>
+    <div class="val">12,408</div>
+    <div class="delta up">▲ +12.4%</div>
+    <svg width="180" height="34" viewBox="0 0 180 34"><polyline points="0,28 26,24 52,26 78,16 104,18 130,9 156,11 180,4" fill="none" stroke="#34DCCB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </div>
+  <div class="card">
+    <p class="lbl">Queries failed · 30d</p>
+    <div class="val">37<span class="unit">/ 4.2k</span></div>
+    <div class="delta down">▼ −3.1%</div>
+    <svg width="180" height="34" viewBox="0 0 180 34"><polyline points="0,8 26,12 52,10 78,18 104,16 130,22 156,21 180,27" fill="none" stroke="#FB6B7C" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  </div>
+</body></html>

@@ -1,17 +1,26 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { useState } from "react";
 
 import { GlassPanel } from "@/components/GlassPanel";
 import { useToast } from "@/components/Toast";
 import { login } from "@/lib/api";
 
+/**
+ * Phase 43 — Neural Dark v2 login.
+ *
+ * Phase 16 contract:
+ *   - Accepts USERNAME or EMAIL in the same identifier field. The
+ *     backend's `_resolve_login_identifier` decides by `@` presence.
+ *   - Public registration is gone — no "create an account" link. A
+ *     deactivated user (`is_active=false`) gets a generic 401, the
+ *     server never reveals which check failed.
+ */
 export default function LoginPage() {
   const router = useRouter();
   const toast = useToast();
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -21,16 +30,12 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      await login(email, password);
-      router.push("/chat");
+      await login(identifier, password);
+      router.push("/");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Login failed";
-      // `login()` throws `Login failed: <status>`. A 401/403 means
-      // wrong credentials — keep the inline field-level hint so the
-      // user fixes it right there. Everything else (network down,
-      // backend 5xx, fetch TypeError) becomes a toast.
       if (/\b40[13]\b/.test(msg)) {
-        setError("Invalid email or password.");
+        setError("Invalid credentials.");
       } else {
         toast.error(msg);
       }
@@ -41,39 +46,87 @@ export default function LoginPage() {
 
   return (
     <main className="mx-auto max-w-md px-4 py-16">
-      <GlassPanel className="px-6 py-6">
-        <h1 className="font-headline text-2xl mb-4">Sign in</h1>
+      <GlassPanel className="p-7">
+        {/* Eyebrow */}
+        <div className="qm-overline mb-2">QueryMind AI</div>
+        <h1 className="qm-h1 mb-1">Sign in</h1>
+        <p className="qm-body-sm mb-5" style={{ color: "var(--fg-2)" }}>
+          Use your username or email.
+        </p>
+
         <form onSubmit={submit} className="space-y-3">
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="email"
-            className="w-full rounded-xl bg-surface-container-high/60 px-4 py-2 text-on-surface border border-outline/20 focus:outline-none focus:border-primary"
-          />
-          <input
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="password"
-            className="w-full rounded-xl bg-surface-container-high/60 px-4 py-2 text-on-surface border border-outline/20 focus:outline-none focus:border-primary"
-          />
-          {error ? <div className="text-error text-sm">{error}</div> : null}
+          <label className="block space-y-1">
+            <span
+              className="qm-overline block"
+              style={{ color: "var(--fg-2)" }}
+            >
+              Username or email
+            </span>
+            <input
+              required
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              autoComplete="username"
+              placeholder="kamola — or kamola@example.com"
+              className="input w-full"
+            />
+          </label>
+          <label className="block space-y-1">
+            <span
+              className="qm-overline block"
+              style={{ color: "var(--fg-2)" }}
+            >
+              Password
+            </span>
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              className="input w-full"
+            />
+          </label>
+          {error ? (
+            <div
+              className="qm-body-sm"
+              style={{ color: "var(--status-error)" }}
+            >
+              {error}
+            </div>
+          ) : null}
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-xl bg-primary-container text-on-primary-container py-2 font-semibold hover:opacity-90 disabled:opacity-50"
+            className="w-full rounded-[10px] py-2 font-semibold transition-colors disabled:opacity-50"
+            style={{
+              backgroundColor: "var(--accent)",
+              color: "var(--on-accent)",
+            }}
+            onMouseEnter={(e) => {
+              if (!loading)
+                e.currentTarget.style.backgroundColor =
+                  "var(--accent-hover)";
+            }}
+            onMouseLeave={(e) => {
+              if (!loading)
+                e.currentTarget.style.backgroundColor = "var(--accent)";
+            }}
           >
-            {loading ? "Signing in..." : "Sign in"}
+            {loading ? "Signing in…" : "Sign in"}
           </button>
         </form>
-        <div className="mt-4 text-sm text-on-surface-variant">
-          New here?{" "}
-          <Link href="/register" className="text-primary underline">
-            Create an account
-          </Link>
+
+        {/* Footer note — no public registration */}
+        <div
+          className="qm-caption mt-5 pt-4"
+          style={{
+            borderTop: "1px solid var(--border-subtle)",
+            color: "var(--fg-2)",
+          }}
+        >
+          No account yet? QueryMind accounts are created by an
+          administrator. Ask your team admin to add you.
         </div>
       </GlassPanel>
     </main>

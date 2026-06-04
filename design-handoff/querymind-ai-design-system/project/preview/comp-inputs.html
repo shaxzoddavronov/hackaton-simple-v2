@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0}
+  body{background:var(--bg-1);color:var(--fg-1);font-family:var(--qm-font-body);padding:24px 28px}
+  .field{margin-bottom:16px}
+  label{display:block;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--fg-2);margin-bottom:7px}
+  .inp{width:100%;box-sizing:border-box;background:var(--bg-0);border:1px solid var(--border);border-radius:var(--qm-radius-md);padding:10px 13px;color:var(--fg-0);font-family:var(--qm-font-body);font-size:14px}
+  .inp.focus{border-color:var(--accent);box-shadow:var(--qm-glow-focus)}
+  .inp.ph{color:var(--fg-3)}
+  .mono{font-family:var(--qm-font-mono);font-size:13px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+</style></head>
+<body>
+  <div class="grid2">
+    <div class="field"><label>Host</label><div class="inp focus mono">db.internal.querymind.io</div></div>
+    <div class="field"><label>Port</label><div class="inp mono">5432</div></div>
+  </div>
+  <div class="grid2">
+    <div class="field"><label>Dialect</label><div class="inp" style="display:flex;justify-content:space-between;align-items:center">postgres <span style="color:var(--fg-3)">▾</span></div></div>
+    <div class="field"><label>Password</label><div class="inp mono">••••••••••••</div></div>
+  </div>
+  <div class="field"><label>Question</label><div class="inp ph">Ask in Uzbek, Russian, or English…</div></div>
+</body></html>

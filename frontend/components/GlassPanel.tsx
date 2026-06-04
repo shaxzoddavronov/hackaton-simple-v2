@@ -9,21 +9,23 @@ import { cn } from "@/lib/cn";
 
 /**
  * `<GlassPanel>` — the **only** place in the codebase that owns the
- * Neural Dark glassmorphism recipe (backdrop blur + translucent surface
- * + low-opacity outline + soft elevation). Every card, modal, message
- * bubble, and chart frame composes this; do not inline the glass classes
- * elsewhere (see CLAUDE.md §Design system).
+ * Neural Dark "resting card" recipe. Phase 43: per the Claude-design
+ * handoff, resting cards lean on the surface step (bg-2 over bg-0/bg-1)
+ * + a subtle hairline border, NOT on glassmorphism — "no glassmorphism
+ * on resting content cards". Floating elements (menus, modals) opt
+ * into elevation via className.
+ *
+ * The component name keeps "Glass" for back-compat — every page imports
+ * it under that name. The recipe itself dropped the backdrop-blur.
  */
 
-const GLASS_CLASSES =
-  // depth + translucency
-  "backdrop-blur-xl bg-surface-container/40 " +
-  // 1px low-opacity outline per DESIGN.md §Cards
-  "border border-outline/20 " +
-  // soft-technical corner radius — uses Tailwind `2xl` (1rem) for large panels
-  "rounded-2xl " +
-  // luminous elevation; not a hard shadow
-  "shadow-lg";
+const PANEL_CLASSES =
+  // Surface step (bg-2) — opaque, sits one level above bg-0/bg-1 pages
+  "bg-[var(--bg-2)] " +
+  // 1px hairline per Neural Dark v2 §Borders
+  "border border-[var(--border-subtle)] " +
+  // lg radius (14px) per Neural Dark v2 §Cards
+  "rounded-[14px]";
 
 type PolymorphicProps<T extends ElementType> = {
   as?: T;
@@ -42,7 +44,7 @@ export const GlassPanel = forwardRef(function GlassPanel<
 ) {
   const Component = (as ?? "div") as ElementType;
   return (
-    <Component ref={ref} className={cn(GLASS_CLASSES, className)} {...rest} />
+    <Component ref={ref} className={cn(PANEL_CLASSES, className)} {...rest} />
   );
 }) as GlassPanelComponent;
 

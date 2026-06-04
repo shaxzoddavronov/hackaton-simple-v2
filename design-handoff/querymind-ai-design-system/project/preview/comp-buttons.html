@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0}
+  body{background:var(--bg-1);color:var(--fg-1);font-family:var(--qm-font-body);padding:26px 28px}
+  .row{display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+  .row:last-child{margin-bottom:0}
+  button{font-family:var(--qm-font-body);font-size:13.5px;font-weight:600;border-radius:var(--qm-radius-md);padding:9px 16px;border:1px solid transparent;cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+  .primary{background:var(--accent);color:var(--on-accent)}
+  .primary.hover{background:var(--accent-hover)}
+  .primary.press{background:var(--accent-press);transform:translateY(1px)}
+  .secondary{background:var(--bg-2);color:var(--fg-0);border-color:var(--border)}
+  .secondary.hover{background:var(--bg-hover)}
+  .ghost{background:transparent;color:var(--fg-1)}
+  .ghost.hover{background:var(--bg-hover)}
+  .danger{background:transparent;color:var(--qm-rose-400);border-color:rgba(251,107,124,.4)}
+  .disabled{background:var(--bg-2);color:var(--fg-3);border-color:var(--border-subtle);cursor:not-allowed}
+  .focus{box-shadow:var(--qm-glow-focus)}
+  .tag{font-family:var(--qm-font-mono);font-size:9.5px;color:var(--fg-3);width:100%;margin-top:-4px}
+</style></head>
+<body>
+  <div class="row">
+    <button class="primary">Add connection</button>
+    <button class="primary hover">Hover</button>
+    <button class="primary press">Press</button>
+    <button class="primary focus">Focus</button>
+  </div>
+  <div class="row">
+    <button class="secondary">Test connection</button>
+    <button class="secondary hover">Hover</button>
+    <button class="ghost">Cancel</button>
+    <button class="ghost hover">Hover</button>
+  </div>
+  <div class="row">
+    <button class="danger">Delete workspace</button>
+    <button class="disabled">Saving…</button>
+    <button class="primary" style="padding:7px 12px;font-size:12px">Small</button>
+  </div>
+</body></html>

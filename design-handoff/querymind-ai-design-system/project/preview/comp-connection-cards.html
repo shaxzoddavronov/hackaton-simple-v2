@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0}
+  body{background:var(--bg-1);color:var(--fg-1);font-family:var(--qm-font-body);padding:22px 28px}
+  .grp{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-3);margin:0 0 12px}
+  .conn{display:flex;align-items:center;gap:13px;background:var(--bg-2);border:1px solid var(--border-subtle);border-radius:var(--qm-radius-lg);padding:13px 15px;margin-bottom:10px}
+  .hdot{width:9px;height:9px;border-radius:50%;flex:none}
+  .nm{font-family:var(--qm-font-mono);font-size:13px;color:var(--fg-0)}
+  .sub{font-size:11.5px;color:var(--fg-2)}
+  .badge{margin-left:auto;font-size:11px;font-weight:600;padding:4px 10px;border-radius:var(--qm-radius-pill)}
+  .lat{font-family:var(--qm-font-mono);font-size:11px;color:var(--fg-3)}
+</style></head>
+<body>
+  <p class="grp">Connection health + status</p>
+  <div class="conn">
+    <span class="hdot" style="background:#35D38A;box-shadow:0 0 8px #35D38A88"></span>
+    <div><div class="nm">pg-quiz</div><div class="sub">postgres · 142 tables</div></div>
+    <span class="lat" style="margin-left:auto">38 ms</span>
+    <span class="badge" style="background:#35D38A1A;color:#35D38A">ready</span>
+  </div>
+  <div class="conn">
+    <span class="hdot" style="background:#4F9CF9"></span>
+    <div><div class="nm">es-search</div><div class="sub">elasticsearch · indexing</div></div>
+    <span class="badge" style="margin-left:auto;background:#4F9CF91A;color:#4F9CF9">profiling</span>
+  </div>
+  <div class="conn">
+    <span class="hdot" style="background:#FB6B7C"></span>
+    <div><div class="nm">snowflake-fin</div><div class="sub">snowflake · check warehouse</div></div>
+    <span class="badge" style="margin-left:auto;background:#F5B13F1A;color:#F5B13F">auth_error</span>
+  </div>
+</body></html>

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html,body{margin:0}
+  body{background:var(--bg-0);color:var(--fg-1);font-family:var(--qm-font-body);padding:0;display:flex}
+  .panel{flex:1;display:flex;align-items:center;justify-content:center;gap:14px;padding:28px}
+  .panel.alt{background:#34DCCB}
+  .lock{display:flex;align-items:center;gap:13px}
+  .lock img{width:46px;height:46px}
+  .word{font-family:var(--qm-font-display);font-weight:700;font-size:27px;letter-spacing:-.02em;line-height:1}
+  .word .ai{font-weight:500;color:var(--fg-3);margin-left:7px}
+  .on-dark .word{color:var(--fg-0)}
+  .on-acc .word{color:#06201E}
+  .on-acc .word .ai{color:#06201E;opacity:.55}
+  .divider{width:1px;background:var(--border)}
+</style></head>
+<body>
+  <div class="panel on-dark">
+    <div class="lock"><img src="../assets/qm-mark.svg" alt="QueryMind mark"><span class="word">QueryMind<span class="ai">AI</span></span></div>
+  </div>
+  <div class="divider"></div>
+  <div class="panel alt on-acc">
+    <div class="lock">
+      <span class="word">QueryMind<span class="ai">AI</span></span>
+    </div>
+  </div>
+</body></html>
