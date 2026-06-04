@@ -22,7 +22,10 @@ Legend: ✅ done · 🔧 in progress · ⏳ queued · ⏸ blocked
 
 ## Now — currently in flight
 
-(empty — Phase 39 just shipped; loop will pick up Phase 40 next)
+- 🔧 **Frontend redesign brief** (ad-hoc)
+  Writing `BACKEND_SURFACE.md` so the user can hand the full
+  backend capability set to Claude design for a frontend redesign.
+  Phase 40 (i18n) paused; resume after the redesign lands.
 
 ## Shipped this session (continued)
 
