@@ -14,22 +14,21 @@ export function AppHeader() {
   const router = useRouter();
   const t = useT();
   const [isSuperuser, setIsSuperuser] = useState(false);
-
-  function signOut() {
-    clearToken();
-    router.push("/login");
-  }
-
-  // Header isn't useful on auth pages
-  if (pathname === "/login" || pathname === "/register") return null;
-
-  const authed = typeof window !== "undefined" && Boolean(getToken());
+  // Track auth + auth-page status in state so we can use them in
+  // hook deps without ever calling hooks conditionally. React's
+  // rules-of-hooks require every hook to fire in the same order
+  // on every render — so the early return must come AFTER every
+  // hook call, not before.
+  const onAuthPage =
+    pathname === "/login" || pathname === "/register";
+  const authed =
+    typeof window !== "undefined" && Boolean(getToken());
 
   // Phase 16 — pull the user's role so the Admin link only shows
-  // for super-users. Fire once on mount when authed; falls back
-  // to "not admin" on any network glitch.
+  // for super-users. Skipped when we're on an auth page (we're
+  // about to bail) or when no token is present.
   useEffect(() => {
-    if (!authed) return;
+    if (onAuthPage || !authed) return;
     const base =
       process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
     fetch(`${base}/auth/me`, {
@@ -46,7 +45,16 @@ export function AppHeader() {
       .catch(() => {
         /* not admin, stay hidden */
       });
-  }, [authed, pathname]);
+  }, [authed, pathname, onAuthPage]);
+
+  // Header isn't useful on auth pages — bail AFTER all hooks have
+  // fired so the hook ordering stays stable across renders.
+  if (onAuthPage) return null;
+
+  function signOut() {
+    clearToken();
+    router.push("/login");
+  }
 
   const nav = [
     { href: "/", label: t.nav_workspaces },
