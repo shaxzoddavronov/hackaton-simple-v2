@@ -46,13 +46,13 @@ export default function AdminAuditPage() {
   return (
     <div className="p-6 space-y-4 max-w-6xl">
       <div className="flex items-baseline justify-between">
-        <h1 className="font-headline text-2xl text-on-surface">
+        <h1 className="font-headline text-2xl text-nd-fg-0">
           Audit log
         </h1>
         <button
           type="button"
           onClick={reload}
-          className="text-xs px-3 py-1.5 rounded-xl bg-surface-variant/40 hover:bg-surface-variant/70"
+          className="text-xs px-3 py-1.5 rounded-xl bg-nd-bg-1 hover:bg-nd-bg-hover"
         >
           ↻ Refresh
         </button>
@@ -61,7 +61,7 @@ export default function AdminAuditPage() {
       <GlassPanel className="p-4">
         <div className="flex flex-wrap gap-3 items-end">
           <label className="block space-y-1">
-            <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+            <span className="text-xs uppercase tracking-wider text-nd-fg-2">
               Action prefix
             </span>
             <input
@@ -72,7 +72,7 @@ export default function AdminAuditPage() {
             />
           </label>
           <label className="block space-y-1">
-            <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+            <span className="text-xs uppercase tracking-wider text-nd-fg-2">
               Status
             </span>
             <select
@@ -96,16 +96,16 @@ export default function AdminAuditPage() {
       {error ? (
         <GlassPanel className="p-5 text-rose-400">{error}</GlassPanel>
       ) : !entries ? (
-        <div className="text-on-surface-variant">Loading audit…</div>
+        <div className="text-nd-fg-2">Loading audit…</div>
       ) : entries.length === 0 ? (
-        <GlassPanel className="p-5 text-on-surface-variant">
+        <GlassPanel className="p-5 text-nd-fg-2">
           No entries match the current filters.
         </GlassPanel>
       ) : (
         <GlassPanel className="overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-surface-variant/30">
-              <tr className="text-left text-on-surface-variant text-xs uppercase tracking-wider">
+            <thead className="bg-nd-bg-1">
+              <tr className="text-left text-nd-fg-2 text-xs uppercase tracking-wider">
                 <th className="p-3">When</th>
                 <th className="p-3">Action</th>
                 <th className="p-3">Status</th>
@@ -119,9 +119,9 @@ export default function AdminAuditPage() {
               {entries.map((e) => (
                 <tr
                   key={e.id}
-                  className="border-t border-outline/15 align-top"
+                  className="border-t border-nd-border-subtle align-top"
                 >
-                  <td className="p-3 text-xs text-on-surface-variant font-mono whitespace-nowrap">
+                  <td className="p-3 text-xs text-nd-fg-2 font-mono whitespace-nowrap">
                     {new Date(e.created_at).toLocaleString()}
                   </td>
                   <td className="p-3 font-mono text-xs">{e.action}</td>
@@ -143,26 +143,26 @@ export default function AdminAuditPage() {
                   <td className="p-3 text-xs font-mono">
                     {e.target_kind ? (
                       <>
-                        <span className="text-on-surface-variant">
+                        <span className="text-nd-fg-2">
                           {e.target_kind}:
                         </span>{" "}
                         {e.target_id}
                       </>
                     ) : (
-                      <span className="text-on-surface-variant">—</span>
+                      <span className="text-nd-fg-2">—</span>
                     )}
                   </td>
                   <td className="p-3 text-xs font-mono">
                     {e.user_id ? (
                       e.user_id.slice(0, 8)
                     ) : (
-                      <span className="text-on-surface-variant">anon</span>
+                      <span className="text-nd-fg-2">anon</span>
                     )}
                   </td>
-                  <td className="p-3 text-xs font-mono text-on-surface-variant">
+                  <td className="p-3 text-xs font-mono text-nd-fg-2">
                     {e.client_ip ?? "—"}
                   </td>
-                  <td className="p-3 text-xs font-mono text-on-surface-variant max-w-md">
+                  <td className="p-3 text-xs font-mono text-nd-fg-2 max-w-md">
                     {Object.keys(e.payload || {}).length > 0 ? (
                       <pre className="whitespace-pre-wrap break-words">
                         {JSON.stringify(e.payload, null, 0)}

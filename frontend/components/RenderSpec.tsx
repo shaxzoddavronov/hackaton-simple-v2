@@ -20,7 +20,7 @@ export function RenderSpec({ spec }: { spec: UISpec }) {
     case "text_only":
       return (
         <GlassPanel className="px-5 py-4 prose prose-invert max-w-none">
-          <div className="whitespace-pre-wrap text-on-surface">{spec.body_md}</div>
+          <div className="whitespace-pre-wrap text-nd-fg-0">{spec.body_md}</div>
         </GlassPanel>
       );
     case "kpi":
@@ -56,7 +56,7 @@ export function RenderSpec({ spec }: { spec: UISpec }) {
     case "dashboard":
       return (
         <GlassPanel className="px-5 py-4">
-          <h2 className="font-headline text-on-surface text-xl mb-4">
+          <h2 className="font-headline text-nd-fg-0 text-xl mb-4">
             {spec.title}
           </h2>
           <div className="grid grid-cols-12 gap-4">

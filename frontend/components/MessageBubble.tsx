@@ -34,7 +34,7 @@ export function MessageBubble({
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[80%] rounded-2xl px-4 py-3 bg-primary-container/30 text-on-surface">
+        <div className="max-w-[80%] rounded-2xl px-4 py-3 bg-nd-accent-wash text-nd-fg-0">
           {message.content}
         </div>
       </div>
@@ -48,7 +48,7 @@ export function MessageBubble({
       {message.ui_spec ? (
         <RenderSpec spec={message.ui_spec} />
       ) : (
-        <div className="text-on-surface-variant italic">No response.</div>
+        <div className="text-nd-fg-2 italic">No response.</div>
       )}
       {message.sql ? (
         <div className="flex items-start gap-2">
@@ -109,7 +109,7 @@ function StarButton({
       onClick={() => void onStar()}
       title="Save this question for re-running from a dashboard"
       className={cn(
-        "text-xs text-on-surface-variant hover:text-tertiary",
+        "text-xs text-nd-fg-2 hover:text-nd-accent",
         "flex items-center gap-1",
       )}
     >
@@ -126,7 +126,7 @@ function CitationsList({
 }) {
   return (
     <details className="text-sm group">
-      <summary className="cursor-pointer text-on-surface-variant hover:text-on-surface flex items-center gap-2 select-none">
+      <summary className="cursor-pointer text-nd-fg-2 hover:text-nd-fg-0 flex items-center gap-2 select-none">
         <span className="uppercase tracking-wider text-xs">
           Sources · {citations.length}
         </span>
@@ -145,16 +145,16 @@ function CitationsList({
           return (
             <li
               key={c.source_key}
-              className="rounded-xl border border-outline/20 bg-surface-container-high/30 px-3 py-2"
+              className="rounded-xl border border-nd-border-subtle bg-nd-bg-1 px-3 py-2"
             >
               <div className="flex items-baseline gap-2 flex-wrap">
-                <span className="text-xs font-mono text-primary">
+                <span className="text-xs font-mono text-nd-accent">
                   [{i + 1}]
                 </span>
-                <span className="font-semibold text-on-surface text-sm">
+                <span className="font-semibold text-nd-fg-0 text-sm">
                   {c.filename}
                 </span>
-                <span className="text-xs text-on-surface-variant uppercase tracking-wider">
+                <span className="text-xs text-nd-fg-2 uppercase tracking-wider">
                   {c.kind === "harvested_doc" ? "Harvested" : "Uploaded"}
                   {" · chunk "}
                   {c.chunk_index + 1}
@@ -167,16 +167,16 @@ function CitationsList({
                 ) : null}
               </div>
               {c.snippet ? (
-                <p className="mt-1 text-on-surface-variant text-xs leading-relaxed">
+                <p className="mt-1 text-nd-fg-2 text-xs leading-relaxed">
                   {c.snippet}
                 </p>
               ) : null}
               {row && row.extras && Object.keys(row.extras).length > 0 ? (
-                <div className="mt-1 flex flex-wrap gap-2 text-xs text-on-surface-variant">
+                <div className="mt-1 flex flex-wrap gap-2 text-xs text-nd-fg-2">
                   {Object.entries(row.extras).map(([k, v]) => (
                     <span
                       key={k}
-                      className="rounded-full bg-surface-container-high/50 border border-outline/20 px-2 py-0.5"
+                      className="rounded-full bg-nd-bg-1 border border-nd-border-subtle px-2 py-0.5"
                     >
                       <span className="font-mono">{k}:</span>{" "}
                       <span>{String(v)}</span>
@@ -199,14 +199,14 @@ function FederationBadge({
 }) {
   const entries = Object.entries(subResults);
   return (
-    <div className="flex flex-wrap gap-2 items-center text-xs text-on-surface-variant">
+    <div className="flex flex-wrap gap-2 items-center text-xs text-nd-fg-2">
       <span className="uppercase tracking-wider">Federated · queried</span>
       {entries.map(([alias, summary]) => (
         <span
           key={alias}
-          className="rounded-full bg-surface-container-high/50 border border-outline/20 px-2 py-0.5"
+          className="rounded-full bg-nd-bg-1 border border-nd-border-subtle px-2 py-0.5"
         >
-          <span className="font-mono text-on-surface">{alias}</span>
+          <span className="font-mono text-nd-fg-0">{alias}</span>
           <span className="ml-1.5 opacity-70">
             {summary.row_count.toLocaleString()} rows · {summary.columns.length} cols
           </span>
@@ -250,8 +250,8 @@ function ExportMenu({ messageId }: { messageId: string }) {
         disabled={busy !== null}
         className={cn(
           "px-2.5 py-1 rounded-md text-xs",
-          "bg-surface-variant/40 hover:bg-surface-variant/70",
-          "text-on-surface border border-outline/30",
+          "bg-nd-bg-1 hover:bg-nd-bg-hover",
+          "text-nd-fg-0 border border-nd-border",
           "transition disabled:opacity-50",
         )}
         title="Download result rows"
@@ -262,7 +262,7 @@ function ExportMenu({ messageId }: { messageId: string }) {
         <div
           className={cn(
             "absolute right-0 mt-1 z-20 w-32",
-            "rounded-md border border-outline/30 bg-surface",
+            "rounded-md border border-nd-border bg-nd-bg-2",
             "shadow-lg overflow-hidden",
           )}
           onMouseLeave={() => setOpen(false)}
@@ -274,7 +274,7 @@ function ExportMenu({ messageId }: { messageId: string }) {
               onClick={() => download(f)}
               className={cn(
                 "block w-full text-left px-3 py-1.5 text-xs",
-                "hover:bg-surface-variant/60 text-on-surface",
+                "hover:bg-nd-bg-hover text-nd-fg-0",
               )}
             >
               {f === "csv"

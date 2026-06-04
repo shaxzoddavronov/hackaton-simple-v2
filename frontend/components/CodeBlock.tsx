@@ -45,7 +45,7 @@ export function CodeBlock({
   const body = (
     <div
       className={cn(
-        "relative overflow-hidden rounded-lg border border-outline-variant/40 bg-surface-container-low/60",
+        "relative overflow-hidden rounded-lg border border-nd-border-subtle/40 bg-nd-bg-1-low/60",
         className,
       )}
     >
@@ -55,11 +55,11 @@ export function CodeBlock({
         aria-label={copied ? "Copied" : "Copy code"}
         className={cn(
           "absolute right-stack-md top-stack-md z-10",
-          "rounded-md border border-outline/20 bg-surface-container/60",
+          "rounded-md border border-nd-border-subtle bg-nd-bg-1/60",
           "px-stack-md py-stack-sm",
           "font-mono text-label-caps uppercase",
-          "text-on-surface-variant transition-colors",
-          "hover:border-primary-container/60 hover:text-primary",
+          "text-nd-fg-2 transition-colors",
+          "hover:border-primary-container/60 hover:text-nd-accent",
           "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-container/60",
         )}
       >
@@ -68,7 +68,7 @@ export function CodeBlock({
       <pre
         className={cn(
           "overflow-x-auto px-container-margin py-stack-lg pr-20",
-          "font-mono text-data-mono text-on-surface",
+          "font-mono text-data-mono text-nd-fg-0",
         )}
       >
         <code className={`language-${language}`}>{code}</code>
@@ -81,7 +81,7 @@ export function CodeBlock({
   return (
     <details
       className={cn(
-        "group rounded-lg border border-outline-variant/30 bg-surface-container/30",
+        "group rounded-lg border border-nd-border-subtle/30 bg-nd-bg-1",
         className,
       )}
     >
@@ -89,8 +89,8 @@ export function CodeBlock({
         className={cn(
           "flex cursor-pointer select-none items-center justify-between",
           "px-container-margin py-stack-md",
-          "font-mono text-label-caps uppercase text-on-surface-variant",
-          "hover:text-primary",
+          "font-mono text-label-caps uppercase text-nd-fg-2",
+          "hover:text-nd-accent",
           "marker:hidden [&::-webkit-details-marker]:hidden",
         )}
       >

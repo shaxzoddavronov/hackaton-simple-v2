@@ -36,7 +36,7 @@ export default function WorkspaceUsagePage() {
   }
   if (!report) {
     return (
-      <div className="p-6 text-on-surface-variant">Loading usage…</div>
+      <div className="p-6 text-nd-fg-2">Loading usage…</div>
     );
   }
 
@@ -46,13 +46,13 @@ export default function WorkspaceUsagePage() {
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-baseline justify-between">
-        <h1 className="font-headline text-2xl text-on-surface">
+        <h1 className="font-headline text-2xl text-nd-fg-0">
           Workspace usage
         </h1>
         <select
           value={days}
           onChange={(e) => setDays(parseInt(e.target.value, 10))}
-          className="bg-surface-variant/40 border border-outline/30 rounded px-2 py-1 text-sm"
+          className="bg-nd-bg-1 border border-nd-border rounded px-2 py-1 text-sm"
         >
           <option value={7}>Last 7 days</option>
           <option value={30}>Last 30 days</option>
@@ -78,11 +78,11 @@ export default function WorkspaceUsagePage() {
       </div>
 
       <GlassPanel className="p-5">
-        <div className="font-headline text-on-surface mb-3">
+        <div className="font-headline text-nd-fg-0 mb-3">
           Daily LLM calls
         </div>
         {report.days.length === 0 ? (
-          <div className="text-on-surface-variant text-sm">
+          <div className="text-nd-fg-2 text-sm">
             No activity recorded in this window.
           </div>
         ) : (
@@ -98,7 +98,7 @@ export default function WorkspaceUsagePage() {
                     "w-full rounded-t",
                     d.llm_calls > 0
                       ? "bg-primary"
-                      : "bg-surface-variant/30",
+                      : "bg-nd-bg-1",
                   )}
                   style={{
                     height: `${Math.max(2, (d.llm_calls / maxLlm) * 100)}%`,
@@ -111,13 +111,13 @@ export default function WorkspaceUsagePage() {
       </GlassPanel>
 
       <GlassPanel className="p-5">
-        <div className="font-headline text-on-surface mb-3">
+        <div className="font-headline text-nd-fg-0 mb-3">
           Per-day breakdown
         </div>
         <div className="overflow-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-on-surface-variant text-left">
+              <tr className="text-nd-fg-2 text-left">
                 <th className="py-1.5 pr-3">Day</th>
                 <th className="py-1.5 pr-3">LLM</th>
                 <th className="py-1.5 pr-3">Tokens (in/out)</th>
@@ -130,7 +130,7 @@ export default function WorkspaceUsagePage() {
               {report.days.map((d) => (
                 <tr
                   key={d.day}
-                  className="border-t border-outline/20"
+                  className="border-t border-nd-border-subtle"
                 >
                   <td className="py-1.5 pr-3">{d.day}</td>
                   <td className="py-1.5 pr-3">{d.llm_calls}</td>
@@ -163,14 +163,14 @@ function StatCard({
 }) {
   return (
     <GlassPanel className="p-4">
-      <div className="text-on-surface-variant text-xs uppercase tracking-wider">
+      <div className="text-nd-fg-2 text-xs uppercase tracking-wider">
         {label}
       </div>
-      <div className="font-headline text-2xl text-on-surface mt-1">
+      <div className="font-headline text-2xl text-nd-fg-0 mt-1">
         {typeof value === "number" ? formatN(value) : value}
       </div>
       {sub ? (
-        <div className="text-on-surface-variant text-xs mt-0.5">
+        <div className="text-nd-fg-2 text-xs mt-0.5">
           {sub}
         </div>
       ) : null}

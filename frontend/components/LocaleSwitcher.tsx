@@ -24,7 +24,7 @@ export function LocaleSwitcher() {
       aria-label="Language"
       className={cn(
         "inline-flex items-center gap-0.5 p-0.5 rounded-lg",
-        "border border-outline/20 bg-surface-variant/30",
+        "border border-nd-border-subtle bg-nd-bg-1",
       )}
     >
       {LOCALES.map((l) => (
@@ -37,8 +37,8 @@ export function LocaleSwitcher() {
           className={cn(
             "px-2 py-0.5 text-xs uppercase tracking-wider rounded-md transition",
             locale === l
-              ? "bg-primary-container/60 text-primary"
-              : "text-on-surface-variant hover:text-on-surface",
+              ? "bg-nd-accent/60 text-nd-accent"
+              : "text-nd-fg-2 hover:text-nd-fg-0",
           )}
         >
           {short(l)}

@@ -72,13 +72,13 @@ export default function ConnectionSchemaPage() {
   if (error)
     return (
       <PageShell workspaceId={params.id}>
-        <GlassPanel className="px-5 py-4 text-error">{error}</GlassPanel>
+        <GlassPanel className="px-5 py-4 text-nd-error">{error}</GlassPanel>
       </PageShell>
     );
   if (!data)
     return (
       <PageShell workspaceId={params.id}>
-        <GlassPanel className="px-5 py-4 text-on-surface-variant">
+        <GlassPanel className="px-5 py-4 text-nd-fg-2">
           Loading…
         </GlassPanel>
       </PageShell>
@@ -87,8 +87,8 @@ export default function ConnectionSchemaPage() {
     return (
       <PageShell workspaceId={params.id}>
         <GlassPanel className="px-5 py-4">
-          <div className="text-on-surface">Status: {data.status}</div>
-          <div className="text-on-surface-variant text-sm mt-1">
+          <div className="text-nd-fg-0">Status: {data.status}</div>
+          <div className="text-nd-fg-2 text-sm mt-1">
             {data.message ?? "Bundle not available."}
           </div>
         </GlassPanel>
@@ -105,7 +105,7 @@ export default function ConnectionSchemaPage() {
     <PageShell workspaceId={params.id} dialect={data.bundle.dialect}>
       <div className="grid grid-cols-12 gap-4">
         <GlassPanel className="col-span-4 px-3 py-3 overflow-y-auto max-h-[80vh]">
-          <div className="text-xs uppercase tracking-wider text-on-surface-variant px-2 pb-2">
+          <div className="text-xs uppercase tracking-wider text-nd-fg-2 px-2 pb-2">
             Tables ({data.bundle.tables.length})
           </div>
           <ul className="space-y-0.5">
@@ -119,12 +119,12 @@ export default function ConnectionSchemaPage() {
                     className={
                       "w-full text-left px-3 py-2 rounded-lg font-mono text-sm " +
                       (active
-                        ? "bg-primary-container/30 text-primary"
-                        : "text-on-surface hover:bg-surface-container-high/30")
+                        ? "bg-nd-accent-wash text-nd-accent"
+                        : "text-nd-fg-0 hover:bg-nd-bg-1")
                     }
                   >
                     {t.name}
-                    <span className="ml-2 text-xs text-on-surface-variant">
+                    <span className="ml-2 text-xs text-nd-fg-2">
                       {t.columns.length} cols
                     </span>
                   </button>
@@ -139,18 +139,18 @@ export default function ConnectionSchemaPage() {
             <>
               <GlassPanel className="px-5 py-4">
                 <div className="flex items-baseline justify-between">
-                  <h2 className="font-headline text-on-surface text-xl">
+                  <h2 className="font-headline text-nd-fg-0 text-xl">
                     {selectedTable.schema}.{selectedTable.name}
                   </h2>
                   {selectedTable.row_count_estimate != null ? (
-                    <span className="text-on-surface-variant text-sm">
+                    <span className="text-nd-fg-2 text-sm">
                       ~{selectedTable.row_count_estimate.toLocaleString()} rows
                     </span>
                   ) : null}
                 </div>
                 <table className="w-full mt-3 text-sm">
                   <thead>
-                    <tr className="text-left border-b border-outline/15 text-on-surface-variant uppercase text-xs tracking-wider">
+                    <tr className="text-left border-b border-nd-border-subtle text-nd-fg-2 uppercase text-xs tracking-wider">
                       <th className="py-2">Column</th>
                       <th>Type</th>
                       <th>Null?</th>
@@ -159,14 +159,14 @@ export default function ConnectionSchemaPage() {
                   </thead>
                   <tbody>
                     {selectedTable.columns.map((c) => (
-                      <tr key={c.name} className="border-b border-outline/10">
+                      <tr key={c.name} className="border-b border-nd-border-subtle">
                         <td className="py-2 font-mono">{c.name}</td>
-                        <td className="text-on-surface-variant">{c.data_type}</td>
-                        <td className="text-on-surface-variant">
+                        <td className="text-nd-fg-2">{c.data_type}</td>
+                        <td className="text-nd-fg-2">
                           {c.nullable ? "yes" : "no"}
                         </td>
-                        <td className="text-on-surface-variant space-x-2">
-                          {c.is_pk ? <span className="text-primary">PK</span> : null}
+                        <td className="text-nd-fg-2 space-x-2">
+                          {c.is_pk ? <span className="text-nd-accent">PK</span> : null}
                           {c.is_id ? <span className="text-secondary">ID</span> : null}
                           {c.fk_to ? (
                             <span className="text-tertiary">→ {c.fk_to}</span>
@@ -179,14 +179,14 @@ export default function ConnectionSchemaPage() {
               </GlassPanel>
 
               <GlassPanel className="px-5 py-4">
-                <div className="text-xs uppercase tracking-wider text-on-surface-variant pb-2">
+                <div className="text-xs uppercase tracking-wider text-nd-fg-2 pb-2">
                   Samples
                 </div>
                 <div className="space-y-3">
                   {Object.entries(samples).map(([col, s]) => (
                     <div key={col} className="text-sm">
-                      <div className="font-mono text-on-surface">{col}</div>
-                      <div className="text-on-surface-variant ml-3">
+                      <div className="font-mono text-nd-fg-0">{col}</div>
+                      <div className="text-nd-fg-2 ml-3">
                         {s.distinct_values ? (
                           <>
                             distinct:{" "}
@@ -238,14 +238,14 @@ function PageShell({
       <header>
         <Link
           href={`/workspaces/${workspaceId}`}
-          className="text-on-surface-variant text-sm hover:underline"
+          className="text-nd-fg-2 text-sm hover:underline"
         >
           ← Connections
         </Link>
-        <p className="font-mono text-label-caps uppercase text-on-surface-variant mt-2">
+        <p className="font-mono text-label-caps uppercase text-nd-fg-2 mt-2">
           Schema Explorer
         </p>
-        <h1 className="font-headline text-headline-lg text-on-surface mt-1">
+        <h1 className="font-headline text-headline-lg text-nd-fg-0 mt-1">
           Profiled schema{dialect ? ` · ${dialect}` : ""}
         </h1>
       </header>

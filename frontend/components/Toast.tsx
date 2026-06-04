@@ -141,8 +141,8 @@ const VARIANT_BORDER: Record<ToastVariant, string> = {
 
 const VARIANT_ICON_COLOR: Record<ToastVariant, string> = {
   success: "text-tertiary",
-  error: "text-error",
-  info: "text-on-surface-variant",
+  error: "text-nd-error",
+  info: "text-nd-fg-2",
 };
 
 const VARIANT_ICON: Record<ToastVariant, string> = {
@@ -204,8 +204,8 @@ function ToastCard({
         // Glassmorphism — mirrors GlassPanel but with a tighter radius
         // and a thicker accent border on the left edge.
         "pointer-events-auto",
-        "bg-surface-container-high/60 backdrop-blur-xl",
-        "border border-outline/20 rounded-xl shadow-lg",
+        "bg-nd-bg-1 backdrop-blur-xl",
+        "border border-nd-border-subtle rounded-xl shadow-lg",
         "px-4 py-3 text-left",
         "flex items-start gap-3",
         VARIANT_BORDER[item.variant],
@@ -215,7 +215,7 @@ function ToastCard({
           ? "translate-x-0 opacity-100"
           : "translate-x-2 opacity-0",
         // Subtle hover affordance signalling click-to-dismiss
-        "hover:bg-surface-container-high/70",
+        "hover:bg-nd-bg-1/70",
       )}
     >
       <span
@@ -227,7 +227,7 @@ function ToastCard({
       >
         {VARIANT_ICON[item.variant]}
       </span>
-      <span className="text-on-surface text-sm leading-snug break-words flex-1">
+      <span className="text-nd-fg-0 text-sm leading-snug break-words flex-1">
         {item.message}
       </span>
     </button>

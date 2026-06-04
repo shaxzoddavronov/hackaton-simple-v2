@@ -43,13 +43,13 @@ export default function NewWorkspacePage() {
   return (
     <main className="mx-auto max-w-2xl px-4 py-8 space-y-6">
       <header>
-        <p className="font-mono text-label-caps uppercase text-on-surface-variant">
+        <p className="font-mono text-label-caps uppercase text-nd-fg-2">
           New workspace
         </p>
-        <h1 className="font-headline text-headline-lg text-on-surface mt-1">
+        <h1 className="font-headline text-headline-lg text-nd-fg-0 mt-1">
           Create a workspace
         </h1>
-        <p className="text-on-surface-variant text-sm mt-1">
+        <p className="text-nd-fg-2 text-sm mt-1">
           A workspace is a folder. Inside it you connect one or more
           databases — Postgres, MySQL, ClickHouse, MongoDB, Elasticsearch,
           and more.
@@ -59,7 +59,7 @@ export default function NewWorkspacePage() {
       <form onSubmit={submit} className="space-y-4">
         <GlassPanel className="px-5 py-4 space-y-3">
           <label className="block space-y-1">
-            <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+            <span className="text-xs uppercase tracking-wider text-nd-fg-2">
               Name
             </span>
             <input
@@ -74,7 +74,7 @@ export default function NewWorkspacePage() {
           <button
             type="submit"
             disabled={busy || !name.trim()}
-            className="w-full rounded-xl bg-primary-container text-on-primary-container py-2 font-semibold disabled:opacity-50"
+            className="w-full rounded-xl bg-nd-accent text-nd-on-accent py-2 font-semibold disabled:opacity-50"
           >
             {busy ? "Creating…" : "Create workspace"}
           </button>

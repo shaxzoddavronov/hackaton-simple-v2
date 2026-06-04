@@ -244,9 +244,9 @@ export default function ChatPage() {
   if (authMissing) {
     return (
       <main className="mx-auto max-w-2xl px-4 py-16">
-        <GlassPanel className="px-6 py-6 text-on-surface">
+        <GlassPanel className="px-6 py-6 text-nd-fg-0">
           You need to{" "}
-          <a className="text-primary underline" href="/login">
+          <a className="text-nd-accent underline" href="/login">
             sign in
           </a>{" "}
           before chatting.
@@ -401,24 +401,24 @@ export default function ChatPage() {
       {/* ── Sidebar: chat history ── */}
       <aside className="w-72 shrink-0 flex flex-col">
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-headline text-on-surface text-lg">Chats</h2>
+          <h2 className="font-headline text-nd-fg-0 text-lg">Chats</h2>
           <button
             type="button"
             onClick={newSession}
-            className="text-xs rounded-lg bg-primary-container/40 text-primary px-2 py-1 hover:opacity-90"
+            className="text-xs rounded-lg bg-nd-accent-wash text-nd-accent px-2 py-1 hover:opacity-90"
           >
             + New
           </button>
         </div>
         <GlassPanel className="flex-1 overflow-y-auto px-2 py-2 space-y-1">
           {historyError ? (
-            <div className="text-error text-xs px-2 py-2">{historyError}</div>
+            <div className="text-nd-error text-xs px-2 py-2">{historyError}</div>
           ) : history === null ? (
-            <div className="text-on-surface-variant text-xs px-2 py-2">
+            <div className="text-nd-fg-2 text-xs px-2 py-2">
               Loading…
             </div>
           ) : history.length === 0 ? (
-            <div className="text-on-surface-variant text-xs px-2 py-2">
+            <div className="text-nd-fg-2 text-xs px-2 py-2">
               Hozircha hech qanday chat yo&apos;q.
             </div>
           ) : (
@@ -430,8 +430,8 @@ export default function ChatPage() {
                   className={
                     "group flex items-center gap-1 rounded-lg px-2 py-2 " +
                     (selected
-                      ? "bg-primary-container/30"
-                      : "hover:bg-surface-container-high/40")
+                      ? "bg-nd-accent-wash"
+                      : "hover:bg-nd-bg-hover")
                   }
                 >
                   <button
@@ -439,10 +439,10 @@ export default function ChatPage() {
                     onClick={() => void openSession(s.id)}
                     className="flex-1 text-left"
                   >
-                    <div className="text-on-surface text-sm truncate">
+                    <div className="text-nd-fg-0 text-sm truncate">
                       {s.title}
                     </div>
-                    <div className="text-on-surface-variant text-xs">
+                    <div className="text-nd-fg-2 text-xs">
                       {new Date(s.last_message_at).toLocaleString("uz-UZ", {
                         month: "short",
                         day: "numeric",
@@ -457,7 +457,7 @@ export default function ChatPage() {
                       e.stopPropagation();
                       void removeSession(s.id);
                     }}
-                    className="opacity-0 group-hover:opacity-100 text-on-surface-variant hover:text-error px-1 text-xs"
+                    className="opacity-0 group-hover:opacity-100 text-nd-fg-2 hover:text-nd-error px-1 text-xs"
                     title="Delete"
                   >
                     ✕
@@ -474,21 +474,21 @@ export default function ChatPage() {
         <header className="mb-4 space-y-3">
           <div className="flex items-end justify-between gap-4">
             <div>
-              <h1 className="font-headline text-2xl text-on-surface">
+              <h1 className="font-headline text-2xl text-nd-fg-0">
                 Neural Chat
               </h1>
-              <p className="text-on-surface-variant text-sm">
+              <p className="text-nd-fg-2 text-sm">
                 Ask anything about your connected databases.
               </p>
             </div>
             {workspaces && workspaces.length > 0 ? (
               <div className="flex items-end gap-3">
-                <label className="flex flex-col text-xs text-on-surface-variant gap-1">
+                <label className="flex flex-col text-xs text-nd-fg-2 gap-1">
                   <span className="uppercase tracking-wider">Workspace</span>
                   <select
                     value={activeWorkspaceId ?? ""}
                     onChange={(e) => pickWorkspace(e.target.value)}
-                    className="rounded-lg bg-surface-container-high/60 px-3 py-2 text-on-surface border border-outline/20 focus:outline-none focus:border-primary"
+                    className="rounded-lg bg-nd-bg-1 px-3 py-2 text-nd-fg-0 border border-nd-border focus:outline-none focus:border-nd-accent"
                   >
                     {workspaces.map((w) => (
                       <option key={w.id} value={w.id}>
@@ -499,7 +499,7 @@ export default function ChatPage() {
                   </select>
                 </label>
                 {connections && connections.length > 0 ? (
-                  <label className="flex flex-col text-xs text-on-surface-variant gap-1">
+                  <label className="flex flex-col text-xs text-nd-fg-2 gap-1">
                     <span className="uppercase tracking-wider">Database</span>
                     <select
                       value={activeConnectionId ?? ""}
@@ -513,7 +513,7 @@ export default function ChatPage() {
                       disabled={
                         chatScope !== "table" && chatScope !== "database"
                       }
-                      className="rounded-lg bg-surface-container-high/60 px-3 py-2 text-on-surface border border-outline/20 focus:outline-none focus:border-primary disabled:opacity-40"
+                      className="rounded-lg bg-nd-bg-1 px-3 py-2 text-nd-fg-0 border border-nd-border focus:outline-none focus:border-nd-accent disabled:opacity-40"
                     >
                       {connections.map((c) => (
                         <option key={c.id} value={c.id}>
@@ -526,7 +526,7 @@ export default function ChatPage() {
                 ) : null}
                 {/* Phase 42 — scope picker. database (default) ⇒ one
                     conn; cluster/all_* ⇒ federation. */}
-                <label className="flex flex-col text-xs text-on-surface-variant gap-1">
+                <label className="flex flex-col text-xs text-nd-fg-2 gap-1">
                   <span className="uppercase tracking-wider">Scope</span>
                   <select
                     value={
@@ -544,7 +544,7 @@ export default function ChatPage() {
                         setScopeClusterId(null);
                       }
                     }}
-                    className="rounded-lg bg-surface-container-high/60 px-3 py-2 text-on-surface border border-outline/20 focus:outline-none focus:border-primary"
+                    className="rounded-lg bg-nd-bg-1 px-3 py-2 text-nd-fg-0 border border-nd-border focus:outline-none focus:border-nd-accent"
                   >
                     <option value="database">This database</option>
                     <option value="all_databases">All databases</option>
@@ -569,19 +569,19 @@ export default function ChatPage() {
             ) : null}
           </div>
           {activeWs && activeWs.status !== "ready" ? (
-            <GlassPanel className="px-4 py-2 text-on-surface-variant text-sm">
+            <GlassPanel className="px-4 py-2 text-nd-fg-2 text-sm">
               Workspace status: <b>{activeWs.status}</b> — profiling tugashini
               kuting yoki{" "}
-              <a href="/" className="text-primary underline">
+              <a href="/" className="text-nd-accent underline">
                 workspaces
               </a>{" "}
               ga qayting.
             </GlassPanel>
           ) : null}
           {workspaces && workspaces.length === 0 ? (
-            <GlassPanel className="px-4 py-3 text-on-surface-variant text-sm">
+            <GlassPanel className="px-4 py-3 text-nd-fg-2 text-sm">
               Hech bir workspace yo&apos;q. Avval{" "}
-              <a className="text-primary underline" href="/workspaces/new">
+              <a className="text-nd-accent underline" href="/workspaces/new">
                 New workspace
               </a>{" "}
               orqali yarating, keyin uning ichida database connection
@@ -589,10 +589,10 @@ export default function ChatPage() {
             </GlassPanel>
           ) : null}
           {activeWs && connections && connections.length === 0 ? (
-            <GlassPanel className="px-4 py-3 text-on-surface-variant text-sm">
+            <GlassPanel className="px-4 py-3 text-nd-fg-2 text-sm">
               Bu workspace ichida hali database yo&apos;q.{" "}
               <a
-                className="text-primary underline"
+                className="text-nd-accent underline"
                 href={`/workspaces/${activeWs.id}`}
               >
                 Connection qo&apos;shing
@@ -630,7 +630,7 @@ export default function ChatPage() {
             );
           })}
           {streaming ? (
-            <div className="text-on-surface-variant text-sm italic">
+            <div className="text-nd-fg-2 text-sm italic">
               {activeNode ? `running ${activeNode}…` : "thinking…"}
             </div>
           ) : null}
@@ -642,7 +642,7 @@ export default function ChatPage() {
             question so the user can re-run with one tap. */}
         {similarHits.length > 0 ? (
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+            <span className="text-xs uppercase tracking-wider text-nd-fg-2">
               Asked before
             </span>
             {similarHits.slice(0, 3).map((h) => (
@@ -652,8 +652,8 @@ export default function ChatPage() {
                 onClick={() => setInput(h.question)}
                 className={cn(
                   "text-xs px-2.5 py-1 rounded-full",
-                  "bg-surface-variant/40 hover:bg-surface-variant/70",
-                  "border border-outline/30 text-on-surface",
+                  "bg-nd-bg-1 hover:bg-nd-bg-hover border border-nd-border-subtle",
+                  "border border-nd-border text-nd-fg-0",
                   "max-w-md truncate",
                 )}
                 title={`${h.question}\n→ ${h.headline}\n(similarity ${h.similarity})`}
@@ -666,7 +666,7 @@ export default function ChatPage() {
             <button
               type="button"
               onClick={() => setSimilarHits([])}
-              className="text-xs text-on-surface-variant hover:text-on-surface"
+              className="text-xs text-nd-fg-2 hover:text-nd-fg-0"
               title="Dismiss"
             >
               ✕
@@ -692,7 +692,7 @@ export default function ChatPage() {
                   }…`
                 : "Ask a question…"
             }
-            className="flex-1 rounded-xl bg-surface-container-high/60 px-4 py-2 text-on-surface border border-outline/20 focus:outline-none focus:border-primary"
+            className="flex-1 rounded-xl bg-surface-container-high/60 px-4 py-2 text-nd-fg-0 border border-outline/20 focus:outline-none focus:border-primary"
             disabled={streaming || !activeConnectionId}
           />
           <button

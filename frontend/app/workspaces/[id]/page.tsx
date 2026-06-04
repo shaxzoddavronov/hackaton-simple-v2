@@ -57,11 +57,11 @@ const REST_PRESETS: { value: string; label: string }[] = [
 ];
 
 const STATUS_TINT: Record<string, string> = {
-  pending: "text-on-surface-variant",
+  pending: "text-nd-fg-2",
   profiling: "text-secondary",
   ready: "text-tertiary",
-  error: "text-error",
-  auth_error: "text-error",
+  error: "text-nd-error",
+  auth_error: "text-nd-error",
 };
 
 export default function WorkspaceDetailPage() {
@@ -132,13 +132,13 @@ export default function WorkspaceDetailPage() {
     <main className="mx-auto max-w-4xl px-4 py-8 space-y-6">
       <header className="flex items-end justify-between">
         <div>
-          <Link href="/" className="text-on-surface-variant text-sm hover:underline">
+          <Link href="/" className="text-nd-fg-2 text-sm hover:underline">
             ← Workspaces
           </Link>
-          <h1 className="font-headline text-headline-lg text-on-surface mt-2">
+          <h1 className="font-headline text-headline-lg text-nd-fg-0 mt-2">
             {workspace?.name ?? "Loading…"}
           </h1>
-          <p className="text-on-surface-variant text-sm mt-1">
+          <p className="text-nd-fg-2 text-sm mt-1">
             Connect one or more databases. The agent picks the right one per
             question based on your selection in chat.
           </p>
@@ -146,17 +146,17 @@ export default function WorkspaceDetailPage() {
         <div className="flex gap-2 flex-wrap">
           <Link
             href={`/chat?workspace=${workspaceId}`}
-            className="rounded-xl bg-surface-container-high/60 border border-outline/20 text-on-surface px-4 py-2 font-semibold"
+            className="rounded-xl bg-nd-bg-1 border border-nd-border-subtle text-nd-fg-0 px-4 py-2 font-semibold"
           >
             Open chat
           </Link>
           <Link
             href={`/workspaces/${workspaceId}/dashboards`}
-            className="rounded-xl bg-surface-container-high/60 border border-outline/20 text-on-surface px-4 py-2 font-semibold"
+            className="rounded-xl bg-nd-bg-1 border border-nd-border-subtle text-nd-fg-0 px-4 py-2 font-semibold"
           >
             Dashboards
           </Link>
-          <label className="rounded-xl bg-surface-container-high/60 border border-outline/20 text-on-surface px-4 py-2 font-semibold cursor-pointer">
+          <label className="rounded-xl bg-nd-bg-1 border border-nd-border-subtle text-nd-fg-0 px-4 py-2 font-semibold cursor-pointer">
             Upload data file
             <input
               type="file"
@@ -172,7 +172,7 @@ export default function WorkspaceDetailPage() {
           <button
             type="button"
             onClick={() => setShowForm(true)}
-            className="rounded-xl bg-primary-container text-on-primary-container px-4 py-2 font-semibold"
+            className="rounded-xl bg-nd-accent text-nd-on-accent px-4 py-2 font-semibold"
           >
             + Add connection
           </button>
@@ -180,7 +180,7 @@ export default function WorkspaceDetailPage() {
       </header>
 
       {error ? (
-        <GlassPanel className="px-4 py-3 text-error text-sm">{error}</GlassPanel>
+        <GlassPanel className="px-4 py-3 text-nd-error text-sm">{error}</GlassPanel>
       ) : null}
 
       {showForm ? (
@@ -195,19 +195,19 @@ export default function WorkspaceDetailPage() {
       ) : null}
 
       {connections === null ? (
-        <GlassPanel className="px-5 py-4 text-on-surface-variant">Loading…</GlassPanel>
+        <GlassPanel className="px-5 py-4 text-nd-fg-2">Loading…</GlassPanel>
       ) : connections.length === 0 ? (
         <GlassPanel className="px-5 py-8 text-center">
-          <p className="text-on-surface mb-2 font-headline text-xl">
+          <p className="text-nd-fg-0 mb-2 font-headline text-xl">
             No connections yet.
           </p>
-          <p className="text-on-surface-variant mb-4">
+          <p className="text-nd-fg-2 mb-4">
             Add a database connection to start asking questions.
           </p>
           <button
             type="button"
             onClick={() => setShowForm(true)}
-            className="inline-block rounded-xl bg-primary-container text-on-primary-container px-4 py-2 font-semibold"
+            className="inline-block rounded-xl bg-nd-accent text-nd-on-accent px-4 py-2 font-semibold"
           >
             Add connection
           </button>
@@ -218,7 +218,7 @@ export default function WorkspaceDetailPage() {
             <GlassPanel key={c.id} className="px-5 py-4">
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <div className="font-headline text-on-surface text-lg flex items-center gap-2">
+                  <div className="font-headline text-nd-fg-0 text-lg flex items-center gap-2">
                     {c.name}
                     <ConnectionStatusDot
                       workspaceId={workspaceId}
@@ -229,14 +229,14 @@ export default function WorkspaceDetailPage() {
                       initialCheckedAt={c.last_health_check_at}
                     />
                   </div>
-                  <div className="text-on-surface-variant text-sm uppercase tracking-wider">
+                  <div className="text-nd-fg-2 text-sm uppercase tracking-wider">
                     {c.dialect}
                   </div>
                 </div>
                 <span
                   className={
                     "text-xs uppercase tracking-wider " +
-                    (STATUS_TINT[c.status] ?? "text-on-surface-variant")
+                    (STATUS_TINT[c.status] ?? "text-nd-fg-2")
                   }
                 >
                   {c.status}
@@ -245,21 +245,21 @@ export default function WorkspaceDetailPage() {
               <div className="flex flex-wrap gap-3 pt-3 text-sm">
                 <Link
                   href={`/workspaces/${workspaceId}/connections/${c.id}/schema`}
-                  className="text-primary hover:underline"
+                  className="text-nd-accent hover:underline"
                 >
                   Schema
                 </Link>
                 <button
                   type="button"
                   onClick={() => onRefresh(c.id)}
-                  className="text-primary hover:underline"
+                  className="text-nd-accent hover:underline"
                 >
                   Re-profile
                 </button>
                 <button
                   type="button"
                   onClick={() => onDelete(c.id)}
-                  className="text-error hover:underline"
+                  className="text-nd-error hover:underline"
                 >
                   Delete
                 </button>
@@ -339,10 +339,10 @@ function DocSourcesSection({ workspaceId }: { workspaceId: string }) {
     <section className="space-y-3 pt-4">
       <div className="flex items-end justify-between">
         <div>
-          <h2 className="font-headline text-headline-md text-on-surface">
+          <h2 className="font-headline text-headline-md text-nd-fg-0">
             Knowledge sources
           </h2>
-          <p className="text-on-surface-variant text-sm">
+          <p className="text-nd-fg-2 text-sm">
             Harvest PDFs, Office docs and HTML from folders, URLs or
             DB-column file references. Indexed in Uzbek, Russian and
             English via bge-m3 — the agent retrieves the most relevant
@@ -352,7 +352,7 @@ function DocSourcesSection({ workspaceId }: { workspaceId: string }) {
         <button
           type="button"
           onClick={() => setShowForm(true)}
-          className="rounded-xl bg-surface-container-high/60 border border-outline/20 text-on-surface px-3 py-1.5 font-semibold"
+          className="rounded-xl bg-nd-bg-1 border border-nd-border-subtle text-nd-fg-0 px-3 py-1.5 font-semibold"
         >
           + Add source
         </button>
@@ -370,11 +370,11 @@ function DocSourcesSection({ workspaceId }: { workspaceId: string }) {
       ) : null}
 
       {sources === null ? (
-        <GlassPanel className="px-5 py-3 text-on-surface-variant text-sm">
+        <GlassPanel className="px-5 py-3 text-nd-fg-2 text-sm">
           Loading…
         </GlassPanel>
       ) : sources.length === 0 ? (
-        <GlassPanel className="px-5 py-4 text-on-surface-variant text-sm">
+        <GlassPanel className="px-5 py-4 text-nd-fg-2 text-sm">
           No knowledge sources yet. Add one to ingest documents into RAG.
         </GlassPanel>
       ) : (
@@ -383,10 +383,10 @@ function DocSourcesSection({ workspaceId }: { workspaceId: string }) {
             <GlassPanel key={s.id} className="px-5 py-3">
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <div className="font-headline text-on-surface text-base">
+                  <div className="font-headline text-nd-fg-0 text-base">
                     {s.name}
                   </div>
-                  <div className="text-on-surface-variant text-xs uppercase tracking-wider">
+                  <div className="text-nd-fg-2 text-xs uppercase tracking-wider">
                     {DOC_SOURCE_KIND_LABEL[s.source_kind] ?? s.source_kind}
                     {" · "}
                     {s.doc_count} docs
@@ -396,7 +396,7 @@ function DocSourcesSection({ workspaceId }: { workspaceId: string }) {
                       : ""}
                   </div>
                   {s.last_error ? (
-                    <div className="text-error text-xs mt-1">
+                    <div className="text-nd-error text-xs mt-1">
                       {s.last_error}
                     </div>
                   ) : null}
@@ -404,7 +404,7 @@ function DocSourcesSection({ workspaceId }: { workspaceId: string }) {
                 <span
                   className={
                     "text-xs uppercase tracking-wider " +
-                    (STATUS_TINT[s.status] ?? "text-on-surface-variant")
+                    (STATUS_TINT[s.status] ?? "text-nd-fg-2")
                   }
                 >
                   {s.status}
@@ -414,14 +414,14 @@ function DocSourcesSection({ workspaceId }: { workspaceId: string }) {
                 <button
                   type="button"
                   onClick={() => onCrawl(s.id)}
-                  className="text-primary hover:underline"
+                  className="text-nd-accent hover:underline"
                 >
                   Crawl now
                 </button>
                 <button
                   type="button"
                   onClick={() => onDelete(s.id)}
-                  className="text-error hover:underline"
+                  className="text-nd-error hover:underline"
                 >
                   Delete
                 </button>
@@ -697,20 +697,20 @@ function AddDocSourcePanel({
   return (
     <GlassPanel className="px-5 py-4 space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="font-headline text-on-surface text-base">
+        <h3 className="font-headline text-nd-fg-0 text-base">
           Add knowledge source
         </h3>
         <button
           type="button"
           onClick={onCancel}
-          className="text-on-surface-variant text-sm hover:text-on-surface"
+          className="text-nd-fg-2 text-sm hover:text-nd-fg-0"
         >
           Cancel
         </button>
       </div>
       <form onSubmit={submit} className="space-y-3">
         <label className="block space-y-1">
-          <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+          <span className="text-xs uppercase tracking-wider text-nd-fg-2">
             Name
           </span>
           <input
@@ -723,7 +723,7 @@ function AddDocSourcePanel({
         </label>
 
         <div className="space-y-1">
-          <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+          <span className="text-xs uppercase tracking-wider text-nd-fg-2">
             Source kind
           </span>
           <div className="flex flex-wrap gap-2">
@@ -747,8 +747,8 @@ function AddDocSourcePanel({
                 className={
                   "px-3 py-1.5 rounded-xl text-sm " +
                   (kind === m.v
-                    ? "bg-primary-container/30 text-primary"
-                    : "bg-surface-container-high/40 text-on-surface-variant")
+                    ? "bg-nd-accent-wash text-nd-accent"
+                    : "bg-nd-bg-1 text-nd-fg-2")
                 }
               >
                 {m.label}
@@ -760,7 +760,7 @@ function AddDocSourcePanel({
         {kind === "folder" ? (
           <>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Folder path (server-local or mounted)
               </span>
               <input
@@ -771,7 +771,7 @@ function AddDocSourcePanel({
                 className="w-full input"
               />
             </label>
-            <label className="flex items-center gap-2 text-sm text-on-surface-variant">
+            <label className="flex items-center gap-2 text-sm text-nd-fg-2">
               <input
                 type="checkbox"
                 checked={folderRecursive}
@@ -784,7 +784,7 @@ function AddDocSourcePanel({
 
         {kind === "url_list" ? (
           <label className="block space-y-1">
-            <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+            <span className="text-xs uppercase tracking-wider text-nd-fg-2">
               URLs (one per line, https only)
             </span>
             <textarea
@@ -801,7 +801,7 @@ function AddDocSourcePanel({
         {kind === "db_column" ? (
           <>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Connection UUID
               </span>
               <input
@@ -814,7 +814,7 @@ function AddDocSourcePanel({
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   Table
                 </span>
                 <input
@@ -825,7 +825,7 @@ function AddDocSourcePanel({
                 />
               </label>
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   Column with file path/URL
                 </span>
                 <input
@@ -837,7 +837,7 @@ function AddDocSourcePanel({
               </label>
             </div>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 URL prefix (optional — prepended to relative values)
               </span>
               <input
@@ -848,7 +848,7 @@ function AddDocSourcePanel({
               />
             </label>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Extra columns (optional — comma-separated, e.g.
                 title, created_at)
               </span>
@@ -858,7 +858,7 @@ function AddDocSourcePanel({
                 placeholder="title, created_at"
                 className="w-full input"
               />
-              <span className="text-xs text-on-surface-variant">
+              <span className="text-xs text-nd-fg-2">
                 Each row&apos;s values for these columns travel with
                 the file&apos;s RAG chunks so citations can reference
                 the originating row by its human-readable identifiers.
@@ -871,7 +871,7 @@ function AddDocSourcePanel({
           <>
             <div className="grid grid-cols-2 gap-3">
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   Server
                 </span>
                 <input
@@ -883,7 +883,7 @@ function AddDocSourcePanel({
                 />
               </label>
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   Share
                 </span>
                 <input
@@ -896,7 +896,7 @@ function AddDocSourcePanel({
               </label>
             </div>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Path inside share (optional)
               </span>
               <input
@@ -908,7 +908,7 @@ function AddDocSourcePanel({
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   Username
                 </span>
                 <input
@@ -919,7 +919,7 @@ function AddDocSourcePanel({
                 />
               </label>
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   Password
                 </span>
                 <input
@@ -932,7 +932,7 @@ function AddDocSourcePanel({
               </label>
             </div>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Domain (optional, leave blank for workgroup)
               </span>
               <input
@@ -942,7 +942,7 @@ function AddDocSourcePanel({
                 className="w-full input"
               />
             </label>
-            <label className="flex items-center gap-2 text-sm text-on-surface-variant">
+            <label className="flex items-center gap-2 text-sm text-nd-fg-2">
               <input
                 type="checkbox"
                 checked={smbRecursive}
@@ -956,7 +956,7 @@ function AddDocSourcePanel({
         {kind === "gdrive" ? (
           <>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Folder ID
               </span>
               <input
@@ -966,14 +966,14 @@ function AddDocSourcePanel({
                 placeholder="1AbC..._XyZ (from the Drive URL)"
                 className="w-full input font-mono text-xs"
               />
-              <span className="text-xs text-on-surface-variant">
+              <span className="text-xs text-nd-fg-2">
                 The part after <code>/folders/</code> in the Drive
                 URL. Share the folder with the service
                 account&apos;s email first.
               </span>
             </label>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Service-account JSON
               </span>
               <textarea
@@ -986,13 +986,13 @@ function AddDocSourcePanel({
                 rows={6}
                 className="w-full input font-mono text-xs"
               />
-              <span className="text-xs text-on-surface-variant">
+              <span className="text-xs text-nd-fg-2">
                 Paste the raw JSON from Google Cloud Console →
                 Service accounts → Keys → Add key. Stored encrypted
                 at rest.
               </span>
             </label>
-            <label className="flex items-center gap-2 text-sm text-on-surface-variant">
+            <label className="flex items-center gap-2 text-sm text-nd-fg-2">
               <input
                 type="checkbox"
                 checked={gdriveRecursive}
@@ -1006,7 +1006,7 @@ function AddDocSourcePanel({
         {kind === "onedrive" ? (
           <>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Client ID (Azure AD app)
               </span>
               <input
@@ -1018,7 +1018,7 @@ function AddDocSourcePanel({
               />
             </label>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Tenant
               </span>
               <input
@@ -1027,19 +1027,19 @@ function AddDocSourcePanel({
                 placeholder="common"
                 className="w-full input"
               />
-              <span className="text-xs text-on-surface-variant">
+              <span className="text-xs text-nd-fg-2">
                 <code>common</code> for personal accounts;{" "}
                 <code>organizations</code> for any business tenant;
                 or a specific tenant ID.
               </span>
             </label>
-            <div className="space-y-2 rounded-xl border border-outline/20 bg-surface-container-high/30 px-3 py-3">
+            <div className="space-y-2 rounded-xl border border-nd-border-subtle bg-nd-bg-1 px-3 py-3">
               <div className="flex items-center gap-3 flex-wrap">
                 <button
                   type="button"
                   onClick={() => void runOneDriveAuth()}
                   disabled={oneDriveAuthBusy || !oneDriveClientId}
-                  className="rounded-xl bg-primary-container text-on-primary-container px-3 py-1.5 text-sm font-semibold disabled:opacity-50"
+                  className="rounded-xl bg-nd-accent text-nd-on-accent px-3 py-1.5 text-sm font-semibold disabled:opacity-50"
                 >
                   {oneDriveAuthBusy ? "Authorising…" : "Authorise OneDrive"}
                 </button>
@@ -1048,7 +1048,7 @@ function AddDocSourcePanel({
                     href={oneDriveDeviceFlow.verification_uri}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-primary underline text-sm"
+                    className="text-nd-accent underline text-sm"
                   >
                     Open {oneDriveDeviceFlow.verification_uri} ↗
                   </a>
@@ -1056,22 +1056,22 @@ function AddDocSourcePanel({
               </div>
               {oneDriveDeviceFlow ? (
                 <div className="text-sm">
-                  <span className="text-on-surface-variant">
+                  <span className="text-nd-fg-2">
                     Enter this code in the browser:{" "}
                   </span>
-                  <span className="font-mono text-base font-semibold text-on-surface select-all">
+                  <span className="font-mono text-base font-semibold text-nd-fg-0 select-all">
                     {oneDriveDeviceFlow.user_code}
                   </span>
                 </div>
               ) : null}
               {oneDriveAuthStatus ? (
-                <div className="text-xs text-on-surface-variant">
+                <div className="text-xs text-nd-fg-2">
                   {oneDriveAuthStatus}
                 </div>
               ) : null}
             </div>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Access token (populated by Authorise button, or paste manually)
               </span>
               <textarea
@@ -1082,7 +1082,7 @@ function AddDocSourcePanel({
                 rows={3}
                 className="w-full input font-mono text-xs"
               />
-              <span className="text-xs text-on-surface-variant">
+              <span className="text-xs text-nd-fg-2">
                 Use the Authorise button above — it runs the device-
                 code flow against Microsoft and populates this field
                 automatically. Refresh handled if refresh_token is
@@ -1090,7 +1090,7 @@ function AddDocSourcePanel({
               </span>
             </label>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Refresh token (optional)
               </span>
               <textarea
@@ -1102,7 +1102,7 @@ function AddDocSourcePanel({
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   Folder path
                 </span>
                 <input
@@ -1115,7 +1115,7 @@ function AddDocSourcePanel({
                 />
               </label>
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   Drive ID (optional)
                 </span>
                 <input
@@ -1133,7 +1133,7 @@ function AddDocSourcePanel({
           <>
             <div className="grid grid-cols-2 gap-3">
               <label className="block space-y-1 col-span-2 sm:col-span-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   IMAP server
                 </span>
                 <input
@@ -1145,7 +1145,7 @@ function AddDocSourcePanel({
                 />
               </label>
               <label className="block space-y-1 col-span-2 sm:col-span-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   Port
                 </span>
                 <input
@@ -1156,7 +1156,7 @@ function AddDocSourcePanel({
                 />
               </label>
             </div>
-            <label className="flex items-center gap-2 text-sm text-on-surface-variant">
+            <label className="flex items-center gap-2 text-sm text-nd-fg-2">
               <input
                 type="checkbox"
                 checked={imapSsl}
@@ -1166,7 +1166,7 @@ function AddDocSourcePanel({
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   Username
                 </span>
                 <input
@@ -1178,7 +1178,7 @@ function AddDocSourcePanel({
                 />
               </label>
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   Password / app password
                 </span>
                 <input
@@ -1191,7 +1191,7 @@ function AddDocSourcePanel({
               </label>
             </div>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Folder
               </span>
               <input
@@ -1200,14 +1200,14 @@ function AddDocSourcePanel({
                 placeholder="INBOX"
                 className="w-full input"
               />
-              <span className="text-xs text-on-surface-variant">
+              <span className="text-xs text-nd-fg-2">
                 Common: <code>INBOX</code>, <code>Sent</code>,{" "}
                 <code>[Gmail]/All Mail</code>.
               </span>
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   Crawl since (days)
                 </span>
                 <input
@@ -1220,7 +1220,7 @@ function AddDocSourcePanel({
                 />
               </label>
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   Max messages per crawl
                 </span>
                 <input
@@ -1233,7 +1233,7 @@ function AddDocSourcePanel({
                 />
               </label>
             </div>
-            <label className="flex items-center gap-2 text-sm text-on-surface-variant">
+            <label className="flex items-center gap-2 text-sm text-nd-fg-2">
               <input
                 type="checkbox"
                 checked={imapIncludeAttachments}
@@ -1244,13 +1244,13 @@ function AddDocSourcePanel({
               Include attachments (PDF / DOCX / images go through the
               same extractors)
             </label>
-            <div className="rounded-xl border border-outline/20 bg-surface-container-high/30 px-3 py-2 text-xs text-on-surface-variant">
+            <div className="rounded-xl border border-nd-border-subtle bg-nd-bg-1 px-3 py-2 text-xs text-nd-fg-2">
               <b>Gmail</b>: enable IMAP in settings, generate an{" "}
               <a
                 href="https://myaccount.google.com/apppasswords"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-primary underline"
+                className="text-nd-accent underline"
               >
                 app password
               </a>{" "}
@@ -1262,7 +1262,7 @@ function AddDocSourcePanel({
                 href="https://account.microsoft.com/security"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-primary underline"
+                className="text-nd-accent underline"
               >
                 app passwords
               </a>
@@ -1274,7 +1274,7 @@ function AddDocSourcePanel({
         {kind === "slack" ? (
           <>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Slack export ZIP
               </span>
               <input
@@ -1306,13 +1306,13 @@ function AddDocSourcePanel({
                   {Math.round((slackZipB64.length * 3) / 4 / 1024 / 1024)} MB)
                 </span>
               ) : null}
-              <span className="text-xs text-on-surface-variant">
+              <span className="text-xs text-nd-fg-2">
                 Slack admin → Settings &amp; administration →{" "}
                 <a
                   href="https://slack.com/help/articles/201658943"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-primary underline"
+                  className="text-nd-accent underline"
                 >
                   Export workspace data
                 </a>
@@ -1322,7 +1322,7 @@ function AddDocSourcePanel({
               </span>
             </label>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Only these channels (optional, comma-separated)
               </span>
               <input
@@ -1331,7 +1331,7 @@ function AddDocSourcePanel({
                 placeholder="engineering, product, support"
                 className="w-full input"
               />
-              <span className="text-xs text-on-surface-variant">
+              <span className="text-xs text-nd-fg-2">
                 Leave blank to crawl every channel in the export.
               </span>
             </label>
@@ -1340,7 +1340,7 @@ function AddDocSourcePanel({
 
         {kind === "telegram" ? (
           <label className="block space-y-1">
-            <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+            <span className="text-xs uppercase tracking-wider text-nd-fg-2">
               Telegram chat export JSON
             </span>
             <input
@@ -1372,7 +1372,7 @@ function AddDocSourcePanel({
                 {Math.round((telegramJsonB64.length * 3) / 4 / 1024)} KB)
               </span>
             ) : null}
-            <span className="text-xs text-on-surface-variant">
+            <span className="text-xs text-nd-fg-2">
               In Telegram Desktop: open the chat → ⋮ menu → Export
               chat history → format <code>JSON</code>. Drop the
               resulting <code>result.json</code> here. Each chat-day
@@ -1384,7 +1384,7 @@ function AddDocSourcePanel({
         <button
           type="submit"
           disabled={busy}
-          className="w-full rounded-xl bg-primary-container text-on-primary-container py-2 font-semibold disabled:opacity-50"
+          className="w-full rounded-xl bg-nd-accent text-nd-on-accent py-2 font-semibold disabled:opacity-50"
         >
           {busy ? "Creating…" : "Create source"}
         </button>
@@ -1780,13 +1780,13 @@ function AddConnectionPanel({
   return (
     <GlassPanel className="px-5 py-4 space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="font-headline text-on-surface text-lg">
+        <h3 className="font-headline text-nd-fg-0 text-lg">
           Add connection
         </h3>
         <button
           type="button"
           onClick={onCancel}
-          className="text-on-surface-variant text-sm hover:text-on-surface"
+          className="text-nd-fg-2 text-sm hover:text-nd-fg-0"
         >
           ✕
         </button>
@@ -1794,7 +1794,7 @@ function AddConnectionPanel({
 
       <form onSubmit={submit} className="space-y-3">
         <label className="block space-y-1">
-          <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+          <span className="text-xs uppercase tracking-wider text-nd-fg-2">
             Connection name
           </span>
           <input
@@ -1807,7 +1807,7 @@ function AddConnectionPanel({
         </label>
 
         <div className="space-y-1">
-          <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+          <span className="text-xs uppercase tracking-wider text-nd-fg-2">
             Dialect
           </span>
           <div className="flex flex-wrap gap-2">
@@ -1819,8 +1819,8 @@ function AddConnectionPanel({
                 className={
                   "px-3 py-1.5 rounded-xl text-sm " +
                   (dialect === d.value
-                    ? "bg-primary-container/30 text-primary"
-                    : "bg-surface-container-high/40 text-on-surface-variant") +
+                    ? "bg-nd-accent-wash text-nd-accent"
+                    : "bg-nd-bg-1 text-nd-fg-2") +
                   (d.supported ? "" : " opacity-50")
                 }
                 title={
@@ -1837,7 +1837,7 @@ function AddConnectionPanel({
         </div>
 
         {!supported ? (
-          <div className="rounded-xl border border-outline/40 bg-surface-container-high/40 px-3 py-2 text-on-surface-variant text-xs">
+          <div className="rounded-xl border border-outline/40 bg-nd-bg-1 px-3 py-2 text-nd-fg-2 text-xs">
             <b>{dialect}</b> engine hozir hali plug qilinmagan.
           </div>
         ) : null}
@@ -1845,7 +1845,7 @@ function AddConnectionPanel({
         {dialect === "postgres" ? (
           <>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Host
               </span>
               <input
@@ -1857,7 +1857,7 @@ function AddConnectionPanel({
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   Port
                 </span>
                 <input
@@ -1869,7 +1869,7 @@ function AddConnectionPanel({
                 />
               </label>
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   Database
                 </span>
                 <input
@@ -1881,7 +1881,7 @@ function AddConnectionPanel({
               </label>
             </div>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 User
               </span>
               <input
@@ -1892,7 +1892,7 @@ function AddConnectionPanel({
               />
             </label>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Password
               </span>
               <input
@@ -1903,7 +1903,7 @@ function AddConnectionPanel({
                 className="w-full input"
               />
             </label>
-            <label className="flex items-center gap-2 text-sm text-on-surface-variant">
+            <label className="flex items-center gap-2 text-sm text-nd-fg-2">
               <input
                 type="checkbox"
                 checked={ssl}
@@ -1914,7 +1914,7 @@ function AddConnectionPanel({
           </>
         ) : dialect === "sqlite" ? (
           <label className="block space-y-1">
-            <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+            <span className="text-xs uppercase tracking-wider text-nd-fg-2">
               SQLite file path
             </span>
             <input
@@ -1927,7 +1927,7 @@ function AddConnectionPanel({
           </label>
         ) : dialect === "duckdb" ? (
           <label className="block space-y-1">
-            <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+            <span className="text-xs uppercase tracking-wider text-nd-fg-2">
               DuckDB file path
             </span>
             <input
@@ -1936,7 +1936,7 @@ function AddConnectionPanel({
               placeholder=":memory:"
               className="w-full input"
             />
-            <span className="text-xs text-on-surface-variant">
+            <span className="text-xs text-nd-fg-2">
               Defaults to <code>:memory:</code> when left blank. On-disk
               files are opened read-only.
             </span>
@@ -1944,7 +1944,7 @@ function AddConnectionPanel({
         ) : dialect === "elasticsearch" ? (
           <>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Hosts (comma-separated URLs)
               </span>
               <input
@@ -1956,7 +1956,7 @@ function AddConnectionPanel({
               />
             </label>
             <div className="space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Auth
               </span>
               <div className="flex gap-2">
@@ -1974,8 +1974,8 @@ function AddConnectionPanel({
                     className={
                       "px-3 py-1.5 rounded-xl text-sm " +
                       (esAuthMode === m.v
-                        ? "bg-primary-container/30 text-primary"
-                        : "bg-surface-container-high/40 text-on-surface-variant")
+                        ? "bg-nd-accent-wash text-nd-accent"
+                        : "bg-nd-bg-1 text-nd-fg-2")
                     }
                   >
                     {m.label}
@@ -1985,7 +1985,7 @@ function AddConnectionPanel({
             </div>
             {esAuthMode === "apikey" ? (
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   API key
                 </span>
                 <input
@@ -2001,7 +2001,7 @@ function AddConnectionPanel({
             {esAuthMode === "basic" ? (
               <>
                 <label className="block space-y-1">
-                  <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                     User
                   </span>
                   <input
@@ -2012,7 +2012,7 @@ function AddConnectionPanel({
                   />
                 </label>
                 <label className="block space-y-1">
-                  <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                     Password
                   </span>
                   <input
@@ -2025,7 +2025,7 @@ function AddConnectionPanel({
                 </label>
               </>
             ) : null}
-            <label className="flex items-center gap-2 text-sm text-on-surface-variant">
+            <label className="flex items-center gap-2 text-sm text-nd-fg-2">
               <input
                 type="checkbox"
                 checked={esVerifyCerts}
@@ -2040,7 +2040,7 @@ function AddConnectionPanel({
           dialect === "mssql" ? (
           <>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Host
               </span>
               <input
@@ -2052,7 +2052,7 @@ function AddConnectionPanel({
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   Port
                 </span>
                 <input
@@ -2064,7 +2064,7 @@ function AddConnectionPanel({
                 />
               </label>
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   {dialect === "oracle" ? "Service name" : "Database"}
                 </span>
                 <input
@@ -2076,7 +2076,7 @@ function AddConnectionPanel({
               </label>
             </div>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 User
               </span>
               <input
@@ -2087,7 +2087,7 @@ function AddConnectionPanel({
               />
             </label>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Password
               </span>
               <input
@@ -2099,7 +2099,7 @@ function AddConnectionPanel({
               />
             </label>
             {dialect === "mysql" ? (
-              <label className="flex items-center gap-2 text-sm text-on-surface-variant">
+              <label className="flex items-center gap-2 text-sm text-nd-fg-2">
                 <input
                   type="checkbox"
                   checked={ssl}
@@ -2109,7 +2109,7 @@ function AddConnectionPanel({
               </label>
             ) : null}
             {dialect === "clickhouse" ? (
-              <label className="flex items-center gap-2 text-sm text-on-surface-variant">
+              <label className="flex items-center gap-2 text-sm text-nd-fg-2">
                 <input
                   type="checkbox"
                   checked={ssl}
@@ -2122,7 +2122,7 @@ function AddConnectionPanel({
         ) : dialect === "snowflake" ? (
           <>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Account locator
               </span>
               <input
@@ -2132,7 +2132,7 @@ function AddConnectionPanel({
                 placeholder="abc12345.eu-central-1"
                 className="w-full input font-mono text-xs"
               />
-              <span className="text-xs text-on-surface-variant">
+              <span className="text-xs text-nd-fg-2">
                 Full Snowflake account URL prefix — e.g.{" "}
                 <code>xyz12345.eu-central-1</code> or{" "}
                 <code>xyz12345.us-east-1.aws</code>.
@@ -2140,7 +2140,7 @@ function AddConnectionPanel({
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   Warehouse
                 </span>
                 <input
@@ -2152,7 +2152,7 @@ function AddConnectionPanel({
                 />
               </label>
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   Database
                 </span>
                 <input
@@ -2166,7 +2166,7 @@ function AddConnectionPanel({
             </div>
             <div className="grid grid-cols-2 gap-3">
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   Schema
                 </span>
                 <input
@@ -2178,7 +2178,7 @@ function AddConnectionPanel({
                 />
               </label>
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   Role (optional)
                 </span>
                 <input
@@ -2190,7 +2190,7 @@ function AddConnectionPanel({
               </label>
             </div>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 User
               </span>
               <input
@@ -2201,7 +2201,7 @@ function AddConnectionPanel({
               />
             </label>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Password
               </span>
               <input
@@ -2211,7 +2211,7 @@ function AddConnectionPanel({
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full input"
               />
-              <span className="text-xs text-on-surface-variant">
+              <span className="text-xs text-nd-fg-2">
                 Snowflake also supports key-pair auth — paste a PEM
                 private key in this field if your account requires it
                 (recommended for production read-only service users).
@@ -2222,7 +2222,7 @@ function AddConnectionPanel({
           <>
             <div className="grid grid-cols-2 gap-3">
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   GCP project
                 </span>
                 <input
@@ -2234,7 +2234,7 @@ function AddConnectionPanel({
                 />
               </label>
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   Dataset
                 </span>
                 <input
@@ -2247,7 +2247,7 @@ function AddConnectionPanel({
               </label>
             </div>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Location
               </span>
               <input
@@ -2256,14 +2256,14 @@ function AddConnectionPanel({
                 placeholder="US"
                 className="w-full input"
               />
-              <span className="text-xs text-on-surface-variant">
+              <span className="text-xs text-nd-fg-2">
                 Common: <code>US</code>, <code>EU</code>,{" "}
                 <code>asia-northeast1</code>. Must match the dataset&apos;s
                 actual region.
               </span>
             </label>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Service-account JSON
               </span>
               <textarea
@@ -2276,7 +2276,7 @@ function AddConnectionPanel({
                 rows={6}
                 className="w-full input font-mono text-xs"
               />
-              <span className="text-xs text-on-surface-variant">
+              <span className="text-xs text-nd-fg-2">
                 Google Cloud Console → IAM → Service Accounts → Keys →
                 Add Key. Roles needed:{" "}
                 <code>roles/bigquery.dataViewer</code> +{" "}
@@ -2288,7 +2288,7 @@ function AddConnectionPanel({
         ) : dialect === "graphql" ? (
           <>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 GraphQL endpoint
               </span>
               <input
@@ -2298,14 +2298,14 @@ function AddConnectionPanel({
                 placeholder="https://api.github.com/graphql"
                 className="w-full input"
               />
-              <span className="text-xs text-on-surface-variant">
+              <span className="text-xs text-nd-fg-2">
                 Single endpoint URL — every query / introspection
                 call POSTs here.
               </span>
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   Auth kind
                 </span>
                 <select
@@ -2328,7 +2328,7 @@ function AddConnectionPanel({
                 </select>
               </label>
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   Timeout (s)
                 </span>
                 <input
@@ -2341,7 +2341,7 @@ function AddConnectionPanel({
             </div>
             {gqlAuthKind === "bearer" ? (
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   Bearer token
                 </span>
                 <input
@@ -2352,7 +2352,7 @@ function AddConnectionPanel({
                   placeholder="ghp_..."
                   className="w-full input"
                 />
-                <span className="text-xs text-on-surface-variant">
+                <span className="text-xs text-nd-fg-2">
                   Sent as <code>Authorization: Bearer …</code>. For
                   GitHub use a fine-grained PAT with read-only
                   scopes; Shopify uses an Admin API access token.
@@ -2361,7 +2361,7 @@ function AddConnectionPanel({
             ) : gqlAuthKind === "api_key" ? (
               <>
                 <label className="block space-y-1">
-                  <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                     API key
                   </span>
                   <input
@@ -2374,7 +2374,7 @@ function AddConnectionPanel({
                 </label>
                 <div className="grid grid-cols-2 gap-3">
                   <label className="block space-y-1">
-                    <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                    <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                       Location
                     </span>
                     <select
@@ -2391,7 +2391,7 @@ function AddConnectionPanel({
                     </select>
                   </label>
                   <label className="block space-y-1">
-                    <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                    <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                       Key name
                     </span>
                     <input
@@ -2407,7 +2407,7 @@ function AddConnectionPanel({
             ) : gqlAuthKind === "basic" ? (
               <div className="grid grid-cols-2 gap-3">
                 <label className="block space-y-1">
-                  <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                     Username
                   </span>
                   <input
@@ -2418,7 +2418,7 @@ function AddConnectionPanel({
                   />
                 </label>
                 <label className="block space-y-1">
-                  <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                     Password
                   </span>
                   <input
@@ -2431,7 +2431,7 @@ function AddConnectionPanel({
                 </label>
               </div>
             ) : null}
-            <p className="text-xs text-on-surface-variant">
+            <p className="text-xs text-nd-fg-2">
               Connection uses GraphQL introspection (<code>__schema</code>)
               to discover root <em>Query</em> fields — these become
               callable &quot;tables&quot; in the planner. Mutations
@@ -2442,7 +2442,7 @@ function AddConnectionPanel({
         ) : dialect === "mongodb" ? (
           <>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Host
               </span>
               <input
@@ -2454,7 +2454,7 @@ function AddConnectionPanel({
             </label>
             <div className="grid grid-cols-2 gap-3">
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   Port
                 </span>
                 <input
@@ -2466,7 +2466,7 @@ function AddConnectionPanel({
                 />
               </label>
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   Database
                 </span>
                 <input
@@ -2478,7 +2478,7 @@ function AddConnectionPanel({
               </label>
             </div>
             <div className="space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Auth
               </span>
               <div className="flex gap-2">
@@ -2495,8 +2495,8 @@ function AddConnectionPanel({
                     className={
                       "px-3 py-1.5 rounded-xl text-sm " +
                       (mongoAuth === m.v
-                        ? "bg-primary-container/30 text-primary"
-                        : "bg-surface-container-high/40 text-on-surface-variant")
+                        ? "bg-nd-accent-wash text-nd-accent"
+                        : "bg-nd-bg-1 text-nd-fg-2")
                     }
                   >
                     {m.label}
@@ -2507,7 +2507,7 @@ function AddConnectionPanel({
             {mongoAuth === "password" ? (
               <>
                 <label className="block space-y-1">
-                  <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                     User
                   </span>
                   <input
@@ -2518,7 +2518,7 @@ function AddConnectionPanel({
                   />
                 </label>
                 <label className="block space-y-1">
-                  <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                     Password
                   </span>
                   <input
@@ -2532,7 +2532,7 @@ function AddConnectionPanel({
               </>
             ) : null}
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Replica set (optional)
               </span>
               <input
@@ -2542,7 +2542,7 @@ function AddConnectionPanel({
                 className="w-full input"
               />
             </label>
-            <label className="flex items-center gap-2 text-sm text-on-surface-variant">
+            <label className="flex items-center gap-2 text-sm text-nd-fg-2">
               <input
                 type="checkbox"
                 checked={mongoTls}
@@ -2554,7 +2554,7 @@ function AddConnectionPanel({
         ) : dialect === "rest_api" ? (
           <>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Base URL
               </span>
               <input
@@ -2567,7 +2567,7 @@ function AddConnectionPanel({
             </label>
 
             <div className="space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Spec source
               </span>
               <div className="flex flex-wrap gap-2">
@@ -2586,8 +2586,8 @@ function AddConnectionPanel({
                     className={
                       "px-3 py-1.5 rounded-xl text-sm " +
                       (apiSpecSource === m.v
-                        ? "bg-primary-container/30 text-primary"
-                        : "bg-surface-container-high/40 text-on-surface-variant")
+                        ? "bg-nd-accent-wash text-nd-accent"
+                        : "bg-nd-bg-1 text-nd-fg-2")
                     }
                   >
                     {m.label}
@@ -2598,7 +2598,7 @@ function AddConnectionPanel({
 
             {apiSpecSource === "preset" ? (
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   Preset
                 </span>
                 <select
@@ -2617,7 +2617,7 @@ function AddConnectionPanel({
 
             {apiSpecSource === "openapi_url" ? (
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   OpenAPI spec URL
                 </span>
                 <input
@@ -2632,7 +2632,7 @@ function AddConnectionPanel({
 
             {apiSpecSource === "openapi_file" ? (
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   Upload OpenAPI JSON
                 </span>
                 <input
@@ -2663,7 +2663,7 @@ function AddConnectionPanel({
             ) : null}
 
             <div className="space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Authentication
               </span>
               <div className="flex flex-wrap gap-2">
@@ -2683,8 +2683,8 @@ function AddConnectionPanel({
                     className={
                       "px-3 py-1.5 rounded-xl text-sm " +
                       (apiAuthKind === m.v
-                        ? "bg-primary-container/30 text-primary"
-                        : "bg-surface-container-high/40 text-on-surface-variant")
+                        ? "bg-nd-accent-wash text-nd-accent"
+                        : "bg-nd-bg-1 text-nd-fg-2")
                     }
                   >
                     {m.label}
@@ -2695,7 +2695,7 @@ function AddConnectionPanel({
 
             {apiAuthKind === "bearer" ? (
               <label className="block space-y-1">
-                <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                   Bearer token
                 </span>
                 <input
@@ -2711,7 +2711,7 @@ function AddConnectionPanel({
             {apiAuthKind === "api_key" ? (
               <>
                 <label className="block space-y-1">
-                  <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                     API key value
                   </span>
                   <input
@@ -2724,7 +2724,7 @@ function AddConnectionPanel({
                 </label>
                 <div className="grid grid-cols-2 gap-3">
                   <label className="block space-y-1">
-                    <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                    <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                       Location
                     </span>
                     <select
@@ -2739,7 +2739,7 @@ function AddConnectionPanel({
                     </select>
                   </label>
                   <label className="block space-y-1">
-                    <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                    <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                       Param/header name
                     </span>
                     <input
@@ -2756,7 +2756,7 @@ function AddConnectionPanel({
             {apiAuthKind === "basic" ? (
               <>
                 <label className="block space-y-1">
-                  <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                     Username
                   </span>
                   <input
@@ -2767,7 +2767,7 @@ function AddConnectionPanel({
                   />
                 </label>
                 <label className="block space-y-1">
-                  <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                     Password
                   </span>
                   <input
@@ -2785,7 +2785,7 @@ function AddConnectionPanel({
               <>
                 <div className="grid grid-cols-2 gap-3">
                   <label className="block space-y-1">
-                    <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                    <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                       Client ID
                     </span>
                     <input
@@ -2796,7 +2796,7 @@ function AddConnectionPanel({
                     />
                   </label>
                   <label className="block space-y-1">
-                    <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                    <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                       Client secret
                     </span>
                     <input
@@ -2809,7 +2809,7 @@ function AddConnectionPanel({
                   </label>
                 </div>
                 <label className="block space-y-1">
-                  <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                     Token URL
                   </span>
                   <input
@@ -2821,7 +2821,7 @@ function AddConnectionPanel({
                   />
                 </label>
                 <label className="block space-y-1">
-                  <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                     Scope (optional)
                   </span>
                   <input
@@ -2834,13 +2834,13 @@ function AddConnectionPanel({
             ) : null}
 
             {apiAuthKind === "none" ? (
-              <div className="rounded-xl border border-outline/20 bg-surface-container-high/40 px-3 py-2 text-on-surface-variant text-xs">
+              <div className="rounded-xl border border-nd-border-subtle bg-nd-bg-1 px-3 py-2 text-nd-fg-2 text-xs">
                 Public API — no credentials sent.
               </div>
             ) : null}
 
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Request timeout (seconds)
               </span>
               <input
@@ -2856,7 +2856,7 @@ function AddConnectionPanel({
         ) : null}
 
         {testing ? (
-          <div className="rounded-xl border border-outline/20 bg-surface-container-high/40 px-3 py-2 text-on-surface-variant text-sm">
+          <div className="rounded-xl border border-nd-border-subtle bg-nd-bg-1 px-3 py-2 text-nd-fg-2 text-sm">
             Connecting…
           </div>
         ) : testResult ? (
@@ -2867,7 +2867,7 @@ function AddConnectionPanel({
               </div>
               {testResult.table_names_preview &&
               testResult.table_names_preview.length ? (
-                <div className="text-on-surface-variant text-xs">
+                <div className="text-nd-fg-2 text-xs">
                   {testResult.table_names_preview.join(", ")}
                   {(testResult.table_count ?? 0) >
                   testResult.table_names_preview.length
@@ -2878,7 +2878,7 @@ function AddConnectionPanel({
             </div>
           ) : (
             <div className="rounded-xl border border-error/40 bg-error/10 px-3 py-2 text-sm">
-              <div className="text-error font-semibold">
+              <div className="text-nd-error font-semibold">
                 ✗ {testResult.error_kind?.toUpperCase()}: {testResult.error}
               </div>
             </div>
@@ -2890,7 +2890,7 @@ function AddConnectionPanel({
             type="button"
             onClick={runTest}
             disabled={testing || busy || !supported}
-            className="flex-1 rounded-xl bg-surface-container-high/60 border border-outline/20 text-on-surface py-2 font-semibold disabled:opacity-50"
+            className="flex-1 rounded-xl bg-nd-bg-1 border border-nd-border-subtle text-nd-fg-0 py-2 font-semibold disabled:opacity-50"
           >
             {testing ? "Testing…" : "Test connection"}
           </button>
@@ -2898,7 +2898,7 @@ function AddConnectionPanel({
             type="submit"
             disabled={!canCreate}
             title={!canCreate ? "Run a successful Test connection first" : ""}
-            className="flex-1 rounded-xl bg-primary-container text-on-primary-container py-2 font-semibold disabled:opacity-50"
+            className="flex-1 rounded-xl bg-nd-accent text-nd-on-accent py-2 font-semibold disabled:opacity-50"
           >
             {busy ? "Adding…" : "Add"}
           </button>

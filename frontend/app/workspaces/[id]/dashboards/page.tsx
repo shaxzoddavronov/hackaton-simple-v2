@@ -98,14 +98,14 @@ export default function DashboardsIndexPage() {
         <div>
           <Link
             href={`/workspaces/${workspaceId}`}
-            className="text-on-surface-variant text-sm hover:underline"
+            className="text-nd-fg-2 text-sm hover:underline"
           >
             ← Workspace
           </Link>
-          <h1 className="font-headline text-headline-lg text-on-surface mt-2">
+          <h1 className="font-headline text-headline-lg text-nd-fg-0 mt-2">
             Dashboards
           </h1>
-          <p className="text-on-surface-variant text-sm mt-1">
+          <p className="text-nd-fg-2 text-sm mt-1">
             Curated collections of starred questions. Each card on a
             dashboard re-runs through the agent on open — fresh answers,
             same prompts.
@@ -114,7 +114,7 @@ export default function DashboardsIndexPage() {
         <button
           type="button"
           onClick={() => setCreating((v) => !v)}
-          className="rounded-xl bg-primary-container text-on-primary-container px-4 py-2 font-semibold"
+          className="rounded-xl bg-nd-accent text-nd-on-accent px-4 py-2 font-semibold"
         >
           + New dashboard
         </button>
@@ -124,7 +124,7 @@ export default function DashboardsIndexPage() {
         <GlassPanel className="px-5 py-4 space-y-3">
           <form onSubmit={onCreate} className="space-y-3">
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Name
               </span>
               <input
@@ -136,7 +136,7 @@ export default function DashboardsIndexPage() {
               />
             </label>
             <label className="block space-y-1">
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+              <span className="text-xs uppercase tracking-wider text-nd-fg-2">
                 Description (optional)
               </span>
               <input
@@ -150,13 +150,13 @@ export default function DashboardsIndexPage() {
               <button
                 type="button"
                 onClick={() => setCreating(false)}
-                className="rounded-xl bg-surface-container-high/60 border border-outline/20 text-on-surface px-3 py-1.5 text-sm"
+                className="rounded-xl bg-nd-bg-1 border border-nd-border-subtle text-nd-fg-0 px-3 py-1.5 text-sm"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="rounded-xl bg-primary-container text-on-primary-container px-3 py-1.5 text-sm font-semibold"
+                className="rounded-xl bg-nd-accent text-nd-on-accent px-3 py-1.5 text-sm font-semibold"
               >
                 Create
               </button>
@@ -169,17 +169,17 @@ export default function DashboardsIndexPage() {
         href={`/workspaces/${workspaceId}/dashboards/inbox`}
         className="block"
       >
-        <GlassPanel className="px-5 py-4 hover:bg-surface-container-high/40 transition-colors">
+        <GlassPanel className="px-5 py-4 hover:bg-nd-bg-1 transition-colors">
           <div className="flex items-center justify-between">
             <div>
-              <div className="font-headline text-on-surface text-lg">
+              <div className="font-headline text-nd-fg-0 text-lg">
                 ⭐ Inbox
               </div>
-              <p className="text-on-surface-variant text-sm">
+              <p className="text-nd-fg-2 text-sm">
                 Starred questions not yet filed under a dashboard.
               </p>
             </div>
-            <span className="text-on-surface-variant">
+            <span className="text-nd-fg-2">
               {inboxCount} question{inboxCount === 1 ? "" : "s"}
             </span>
           </div>
@@ -187,15 +187,15 @@ export default function DashboardsIndexPage() {
       </Link>
 
       {dashboards === null ? (
-        <GlassPanel className="px-5 py-4 text-on-surface-variant">
+        <GlassPanel className="px-5 py-4 text-nd-fg-2">
           Loading…
         </GlassPanel>
       ) : dashboards.length === 0 ? (
         <GlassPanel className="px-5 py-8 text-center">
-          <p className="text-on-surface mb-2 font-headline text-xl">
+          <p className="text-nd-fg-0 mb-2 font-headline text-xl">
             No dashboards yet.
           </p>
-          <p className="text-on-surface-variant">
+          <p className="text-nd-fg-2">
             Star questions from chat (⭐ button on assistant messages),
             then group them into dashboards here.
           </p>
@@ -209,15 +209,15 @@ export default function DashboardsIndexPage() {
                   href={`/workspaces/${workspaceId}/dashboards/${d.id}`}
                   className="flex-1 hover:underline"
                 >
-                  <div className="font-headline text-on-surface text-lg">
+                  <div className="font-headline text-nd-fg-0 text-lg">
                     {d.name}
                   </div>
                   {d.description ? (
-                    <p className="text-on-surface-variant text-sm">
+                    <p className="text-nd-fg-2 text-sm">
                       {d.description}
                     </p>
                   ) : null}
-                  <div className="text-on-surface-variant text-xs uppercase tracking-wider mt-1">
+                  <div className="text-nd-fg-2 text-xs uppercase tracking-wider mt-1">
                     {d.question_count} question
                     {d.question_count === 1 ? "" : "s"}
                   </div>
@@ -225,7 +225,7 @@ export default function DashboardsIndexPage() {
                 <button
                   type="button"
                   onClick={() => onDelete(d.id)}
-                  className="text-error text-sm hover:underline"
+                  className="text-nd-error text-sm hover:underline"
                 >
                   Delete
                 </button>

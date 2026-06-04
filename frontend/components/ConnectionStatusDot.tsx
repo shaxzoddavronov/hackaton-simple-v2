@@ -102,8 +102,8 @@ export function ConnectionStatusDot({
         disabled={busy}
         className={cn(
           "text-xs px-1 py-0.5 rounded",
-          "text-on-surface-variant hover:text-on-surface",
-          "hover:bg-surface-variant/30",
+          "text-nd-fg-2 hover:text-nd-fg-0",
+          "hover:bg-nd-bg-1",
           "disabled:opacity-50",
         )}
         title="Recheck now"

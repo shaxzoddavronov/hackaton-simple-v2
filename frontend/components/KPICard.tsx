@@ -24,15 +24,15 @@ function renderable(v: unknown): string {
 export function KPICard({ spec }: { spec: KPI }) {
   return (
     <div className="space-y-2">
-      <div className="text-on-surface-variant uppercase text-xs tracking-wider">
+      <div className="text-nd-fg-2 uppercase text-xs tracking-wider">
         {renderable(spec.label)}
       </div>
       <div className="flex items-baseline gap-2">
-        <div className="font-mono text-3xl text-on-surface">
+        <div className="font-mono text-3xl text-nd-fg-0">
           {renderable(spec.value)}
         </div>
         {spec.unit ? (
-          <div className="text-on-surface-variant text-sm">
+          <div className="text-nd-fg-2 text-sm">
             {renderable(spec.unit)}
           </div>
         ) : null}
@@ -42,7 +42,7 @@ export function KPICard({ spec }: { spec: KPI }) {
           className={
             spec.delta >= 0
               ? "text-tertiary text-sm"
-              : "text-error text-sm"
+              : "text-nd-error text-sm"
           }
         >
           {spec.delta >= 0 ? "▲" : "▼"} {Math.abs(spec.delta).toFixed(1)}%

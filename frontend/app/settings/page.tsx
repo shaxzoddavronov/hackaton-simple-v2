@@ -29,13 +29,13 @@ export default function SettingsPage() {
   return (
     <main className="mx-auto max-w-2xl px-4 py-8 space-y-4">
       <header>
-        <p className="font-mono text-label-caps uppercase text-on-surface-variant">
+        <p className="font-mono text-label-caps uppercase text-nd-fg-2">
           Settings
         </p>
-        <h1 className="font-headline text-headline-lg text-on-surface mt-1">
+        <h1 className="font-headline text-headline-lg text-nd-fg-0 mt-1">
           Inference target
         </h1>
-        <p className="text-on-surface-variant text-sm mt-1">
+        <p className="text-nd-fg-2 text-sm mt-1">
           QueryMind talks only to a local vLLM server. Change these by
           editing <span className="font-mono">.env</span> and restarting
           the backend.
@@ -43,9 +43,9 @@ export default function SettingsPage() {
       </header>
 
       {error ? (
-        <GlassPanel className="px-5 py-4 text-error">{error}</GlassPanel>
+        <GlassPanel className="px-5 py-4 text-nd-error">{error}</GlassPanel>
       ) : !data ? (
-        <GlassPanel className="px-5 py-4 text-on-surface-variant">
+        <GlassPanel className="px-5 py-4 text-nd-fg-2">
           Loading…
         </GlassPanel>
       ) : (
@@ -60,11 +60,11 @@ export default function SettingsPage() {
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between border-b border-outline/10 last:border-0 py-2">
-      <span className="text-on-surface-variant text-sm uppercase tracking-wider">
+    <div className="flex justify-between border-b border-nd-border-subtle last:border-0 py-2">
+      <span className="text-nd-fg-2 text-sm uppercase tracking-wider">
         {label}
       </span>
-      <span className="font-mono text-on-surface">{value}</span>
+      <span className="font-mono text-nd-fg-0">{value}</span>
     </div>
   );
 }

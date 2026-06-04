@@ -153,18 +153,18 @@ export default function AdminUsersPage() {
   }
   if (!users) {
     return (
-      <div className="p-6 text-on-surface-variant">Loading users…</div>
+      <div className="p-6 text-nd-fg-2">Loading users…</div>
     );
   }
 
   return (
     <div className="p-6 space-y-4 max-w-5xl">
       <div className="flex items-baseline justify-between">
-        <h1 className="font-headline text-2xl text-on-surface">Users</h1>
+        <h1 className="font-headline text-2xl text-nd-fg-0">Users</h1>
         <button
           type="button"
           onClick={() => setShowCreate((v) => !v)}
-          className="px-3 py-1.5 rounded-xl bg-primary-container/40 text-primary text-sm"
+          className="px-3 py-1.5 rounded-xl bg-nd-accent-wash text-nd-accent text-sm"
         >
           {showCreate ? "✕ Cancel" : "+ New user"}
         </button>
@@ -182,8 +182,8 @@ export default function AdminUsersPage() {
 
       <GlassPanel className="overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-surface-variant/30">
-            <tr className="text-left text-on-surface-variant text-xs uppercase tracking-wider">
+          <thead className="bg-nd-bg-1">
+            <tr className="text-left text-nd-fg-2 text-xs uppercase tracking-wider">
               <th className="p-3">Username</th>
               <th className="p-3">Email</th>
               <th className="p-3">Role</th>
@@ -198,17 +198,17 @@ export default function AdminUsersPage() {
               return (
                 <tr
                   key={u.id}
-                  className="border-t border-outline/15 align-middle"
+                  className="border-t border-nd-border-subtle align-middle"
                 >
                   <td className="p-3 font-mono">{u.username}</td>
-                  <td className="p-3 text-on-surface-variant">{u.email}</td>
+                  <td className="p-3 text-nd-fg-2">{u.email}</td>
                   <td className="p-3">
                     <span
                       className={cn(
                         "px-2 py-0.5 text-xs uppercase tracking-wider rounded",
                         u.is_superuser
                           ? "bg-amber-500/15 text-amber-300"
-                          : "bg-surface-variant/30 text-on-surface-variant",
+                          : "bg-nd-bg-1 text-nd-fg-2",
                       )}
                     >
                       {u.is_superuser ? "admin" : "user"}
@@ -226,7 +226,7 @@ export default function AdminUsersPage() {
                       {u.is_active ? "active" : "disabled"}
                     </span>
                   </td>
-                  <td className="p-3 text-xs text-on-surface-variant">
+                  <td className="p-3 text-xs text-nd-fg-2">
                     {new Date(u.created_at).toLocaleDateString()}
                   </td>
                   <td className="p-3">
@@ -240,7 +240,7 @@ export default function AdminUsersPage() {
                             ? "You cannot deactivate your own account"
                             : ""
                         }
-                        className="text-xs px-2 py-1 rounded bg-surface-variant/40 hover:bg-surface-variant/70 disabled:opacity-40"
+                        className="text-xs px-2 py-1 rounded bg-nd-bg-1 hover:bg-nd-bg-hover disabled:opacity-40"
                       >
                         {u.is_active ? "Disable" : "Activate"}
                       </button>
@@ -251,7 +251,7 @@ export default function AdminUsersPage() {
                         title={
                           isMe ? "You cannot demote yourself" : ""
                         }
-                        className="text-xs px-2 py-1 rounded bg-surface-variant/40 hover:bg-surface-variant/70 disabled:opacity-40"
+                        className="text-xs px-2 py-1 rounded bg-nd-bg-1 hover:bg-nd-bg-hover disabled:opacity-40"
                       >
                         {u.is_superuser ? "Demote" : "Promote"}
                       </button>
@@ -259,7 +259,7 @@ export default function AdminUsersPage() {
                         type="button"
                         disabled={busy === u.id}
                         onClick={() => onResetPassword(u)}
-                        className="text-xs px-2 py-1 rounded bg-surface-variant/40 hover:bg-surface-variant/70 disabled:opacity-40"
+                        className="text-xs px-2 py-1 rounded bg-nd-bg-1 hover:bg-nd-bg-hover disabled:opacity-40"
                       >
                         Reset password
                       </button>
@@ -326,7 +326,7 @@ function CreateUserForm({
     <GlassPanel className="p-4">
       <form onSubmit={submit} className="grid grid-cols-2 gap-3 text-sm">
         <label className="block space-y-1 col-span-1">
-          <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+          <span className="text-xs uppercase tracking-wider text-nd-fg-2">
             Username
           </span>
           <input
@@ -339,7 +339,7 @@ function CreateUserForm({
           />
         </label>
         <label className="block space-y-1 col-span-1">
-          <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+          <span className="text-xs uppercase tracking-wider text-nd-fg-2">
             Email
           </span>
           <input
@@ -352,7 +352,7 @@ function CreateUserForm({
           />
         </label>
         <label className="block space-y-1 col-span-1">
-          <span className="text-xs uppercase tracking-wider text-on-surface-variant">
+          <span className="text-xs uppercase tracking-wider text-nd-fg-2">
             Password
           </span>
           <input
@@ -379,7 +379,7 @@ function CreateUserForm({
           <button
             type="submit"
             disabled={submitting}
-            className="px-3 py-1.5 rounded-xl bg-primary-container/40 text-primary text-sm disabled:opacity-50"
+            className="px-3 py-1.5 rounded-xl bg-nd-accent-wash text-nd-accent text-sm disabled:opacity-50"
           >
             {submitting ? "Creating…" : "Create user"}
           </button>

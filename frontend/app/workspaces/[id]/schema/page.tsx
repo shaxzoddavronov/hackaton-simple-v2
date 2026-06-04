@@ -42,33 +42,33 @@ export default function WorkspaceSchemaIndexPage() {
       <header>
         <Link
           href={`/workspaces/${params.id}`}
-          className="text-on-surface-variant text-sm hover:underline"
+          className="text-nd-fg-2 text-sm hover:underline"
         >
           ← Connections
         </Link>
-        <p className="font-mono text-label-caps uppercase text-on-surface-variant mt-2">
+        <p className="font-mono text-label-caps uppercase text-nd-fg-2 mt-2">
           Schema Explorer
         </p>
-        <h1 className="font-headline text-headline-lg text-on-surface mt-1">
+        <h1 className="font-headline text-headline-lg text-nd-fg-0 mt-1">
           {data?.name ?? "Loading…"}
         </h1>
-        <p className="text-on-surface-variant text-sm mt-1">
+        <p className="text-nd-fg-2 text-sm mt-1">
           Pick a database to inspect its profiled schema.
         </p>
       </header>
 
       {error ? (
-        <GlassPanel className="px-5 py-4 text-error">{error}</GlassPanel>
+        <GlassPanel className="px-5 py-4 text-nd-error">{error}</GlassPanel>
       ) : !data ? (
-        <GlassPanel className="px-5 py-4 text-on-surface-variant">
+        <GlassPanel className="px-5 py-4 text-nd-fg-2">
           Loading…
         </GlassPanel>
       ) : data.connections.length === 0 ? (
-        <GlassPanel className="px-5 py-4 text-on-surface-variant">
+        <GlassPanel className="px-5 py-4 text-nd-fg-2">
           No connections yet —{" "}
           <Link
             href={`/workspaces/${params.id}`}
-            className="text-primary hover:underline"
+            className="text-nd-accent hover:underline"
           >
             add one
           </Link>
@@ -80,10 +80,10 @@ export default function WorkspaceSchemaIndexPage() {
             <GlassPanel key={c.connection_id} className="px-5 py-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="font-headline text-on-surface text-lg">
+                  <div className="font-headline text-nd-fg-0 text-lg">
                     {c.name}
                   </div>
-                  <div className="text-on-surface-variant text-sm uppercase tracking-wider">
+                  <div className="text-nd-fg-2 text-sm uppercase tracking-wider">
                     {c.dialect}
                     {c.table_count != null
                       ? ` · ${c.table_count} tables`
@@ -93,12 +93,12 @@ export default function WorkspaceSchemaIndexPage() {
                 {c.bundle_ready ? (
                   <Link
                     href={`/workspaces/${params.id}/connections/${c.connection_id}/schema`}
-                    className="text-primary hover:underline text-sm"
+                    className="text-nd-accent hover:underline text-sm"
                   >
                     Open schema →
                   </Link>
                 ) : (
-                  <span className="text-on-surface-variant text-sm uppercase tracking-wider">
+                  <span className="text-nd-fg-2 text-sm uppercase tracking-wider">
                     {c.status}
                   </span>
                 )}

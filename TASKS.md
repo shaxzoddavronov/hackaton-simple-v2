@@ -22,15 +22,7 @@ Legend: ✅ done · 🔧 in progress · ⏳ queued · ⏸ blocked
 
 ## Now — currently in flight
 
-- 🔧 **Phase 43 — Neural Dark v2 refresh** (resumed)
-  WIP files already in the working tree from the earlier
-  pause: `frontend/app/neural-dark.css`, `globals.css`,
-  `layout.tsx`, `login/page.tsx`, `components/AppHeader.tsx`,
-  `components/GlassPanel.tsx`, `tailwind.config.ts`. This
-  session lands those + a sweep over the remaining pages
-  (workspaces list, register, settings, chat shell, admin
-  pages) to drop legacy MD3 tokens in favour of the
-  `var(--bg-*) / var(--fg-*) / var(--accent)` semantic vars.
+(empty — Phase 43 fully shipped across two waves)
 
 ## Queued (user-added 2026-06-04)
 
@@ -89,6 +81,23 @@ Legend: ✅ done · 🔧 in progress · ⏳ queued · ⏸ blocked
     `conversation_history` before invoking the graph
   - 13 new unit tests covering threshold gates, transcript shape,
     LLM happy/sad path, injected-client override; suite 751 passed
+
+- ✅ **Phase 43 — Neural Dark v2 refresh (full ship)**
+  - Wave 1 (foundation): neural-dark.css token sheet imported
+    into globals; tailwind config exposes `nd-*` semantic keys;
+    GlassPanel recipe swapped from glassmorphism → resting
+    surface; AppHeader, app/page, app/login, app/register
+    migrated; background atmosphere reduced to a single cyan
+    glow (no purple AI cliché).
+  - Wave 2 (page sweep): bulk-rewrote 15 more files —
+    app/chat, app/settings, app/admin/users, app/admin/audit,
+    app/workspaces/[id]/* (detail, schema, usage, dashboards),
+    app/workspaces/new, and components/* (MessageBubble,
+    RenderSpec, KPICard, Toast, CodeBlock, ConnectionStatusDot,
+    LocaleSwitcher). Mapping table baked into the migration
+    script for reproducibility.
+  - Frontend type-check clean across both waves; i18n bundles
+    parity OK.
 
 - ✅ **Phase 42 — Scope picker (full ship)**
   - backend wiring: `GraphState.scope_connection_ids`
