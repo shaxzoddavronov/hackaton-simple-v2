@@ -322,6 +322,20 @@ async def post_chat(
                     await session.commit()
                 except Exception:  # noqa: BLE001
                     log.exception("[%s] /refresh-schema enqueue failed", trace)
+                    # The commit / FK violation aborts the Postgres
+                    # tx at the asyncpg layer; without rollback the
+                    # next statement on this session (the assistant
+                    # message INSERT below) would die with
+                    # InFailedSQLTransactionError — same root cause
+                    # as the find_similar / graph rollback fixes in
+                    # b267df5 and 17571e5.
+                    try:
+                        await session.rollback()
+                    except Exception:  # pragma: no cover
+                        log.exception(
+                            "[%s] rollback after ProfileJob enqueue failed",
+                            trace,
+                        )
 
             # Persist the assistant turn so /sql, /lang etc. show up
             # in the chat history just like a normal answer.
